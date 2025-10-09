@@ -1,3 +1,4 @@
+
 // Fix: Implement the ProductForm component, which was missing.
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
@@ -15,7 +16,7 @@ interface ProductFormProps {
   onCancel: () => void;
 }
 
-type ProductFormData = Omit<Product, 'id' | 'created_at' | 'units' | 'categories'> & {
+type ProductFormData = Omit<Product, 'id' | 'created_at' | 'units' | 'categories' | 'unit_price' | 'description'> & {
     category_name_display?: string; // For the category search input
 };
 
@@ -61,12 +62,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
   } = useForm<ProductFormData>({
     defaultValues: {
       name: '',
-      description: '',
       hsn_code: '',
       sku: '',
       stock_quantity: 0,
       tax_rate: 0,
-      unit_price: 0,
       unit_id: null,
       category_id: null,
       category_name_display: '',
@@ -79,8 +78,11 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
     if (product && categories) {
         const categoryName = categories.find(c => c.id === product.category_id)?.name || '';
         reset({
-            ...product,
-            tax_rate: product.tax_rate * 100, // Convert decimal to percentage for display
+            name: product.name,
+            hsn_code: product.hsn_code,
+            sku: product.sku,
+            stock_quantity: product.stock_quantity,
+            tax_rate: product.tax_rate * 100,
             unit_id: product.unit_id || null,
             category_id: product.category_id || null,
             category_name_display: categoryName,
@@ -88,12 +90,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
     } else if (!product) {
         reset({
             name: '',
-            description: '',
             hsn_code: '',
             sku: '',
             stock_quantity: 0,
             tax_rate: 0,
-            unit_price: 0,
             unit_id: null,
             category_id: null,
             category_name_display: '',
@@ -165,13 +165,26 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
     }
 
     const { category_name_display, ...productData } = data;
-    mutation.mutate({ product: {
+    
+    const commonData = {
       ...productData,
+      sku: data.sku?.trim() || null,
       stock_quantity: Number(data.stock_quantity),
       tax_rate: Number(data.tax_rate) / 100, // Store tax rate as a decimal
       unit_id: data.unit_id || null,
       category_id: finalCategoryId,
-    }, id: product?.id });
+    };
+
+    if (product?.id) { // This is an update
+        mutation.mutate({ product: commonData, id: product.id });
+    } else { // This is a new product
+        const newProduct: ProductInsert = {
+            ...commonData,
+            unit_price: 0, // Default to 0
+            description: null, // Default to null
+        };
+        mutation.mutate({ product: newProduct });
+    }
   };
 
   return (
@@ -180,16 +193,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
         <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Product Name</label>
         <Input id="name" {...register('name', { required: 'Product name is required' })} />
         {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>}
-      </div>
-      
-      <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
-        <textarea
-          id="description"
-          rows={3}
-          className="flex w-full rounded-md border border-slate-300 bg-transparent py-2 px-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-50 dark:focus:ring-slate-400 dark:focus:ring-offset-slate-900"
-          {...register('description')}
-        />
       </div>
       
        <div className="relative" ref={categorySuggestionsRef}>
@@ -229,12 +232,10 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
         </div>
         <div>
           <label htmlFor="sku" className="block text-sm font-medium text-gray-700 dark:text-gray-300">SKU</label>
-          <Input id="sku" {...register('sku')} />
-        </div>
-         <div>
-          <label htmlFor="unit_price" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Unit Price (₹)</label>
-          <Input id="unit_price" type="number" step="0.01" {...register('unit_price', { required: 'Unit price is required', valueAsNumber: true, min: { value: 0, message: 'Unit price must be non-negative' } })} />
-          {errors.unit_price && <p className="mt-1 text-sm text-red-500">{errors.unit_price.message}</p>}
+          <Input id="sku" {...register('sku', {
+            validate: value => (value && value.trim().length === 0) ? 'SKU cannot be only whitespace.' : true,
+          })} />
+          {errors.sku && <p className="mt-1 text-sm text-red-500">{errors.sku.message}</p>}
         </div>
         <div>
           <label htmlFor="unit_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Unit</label>
@@ -253,7 +254,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
           <Input id="stock_quantity" type="number" {...register('stock_quantity', { required: true, valueAsNumber: true, min: 0 })} />
           {errors.stock_quantity && <p className="mt-1 text-sm text-red-500">Stock cannot be negative.</p>}
         </div>
-        <div>
+        <div className="md:col-span-2">
           <label htmlFor="tax_rate" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tax Rate (%)</label>
           <Input id="tax_rate" type="number" step="0.01" {...register('tax_rate', { required: true, valueAsNumber: true, min: 0, max: 100 })} />
           {errors.tax_rate && <p className="mt-1 text-sm text-red-500">Tax rate must be between 0 and 100.</p>}

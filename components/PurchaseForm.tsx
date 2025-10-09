@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
@@ -17,6 +18,7 @@ type PurchaseFormData = Omit<Purchase, 'id' | 'created_at' | 'product_id'> & {
     product_name: string;
     new_product_name?: string;
     new_product_hsn_code?: string;
+    new_product_sku?: string;
     new_product_tax_rate?: number;
     new_product_unit_id?: string | null;
     new_product_unit_name?: string;
@@ -81,6 +83,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
       product_name: '',
       new_product_name: '',
       new_product_hsn_code: '',
+      new_product_sku: '',
       new_product_tax_rate: 0,
       new_product_unit_id: null,
       new_product_unit_name: '',
@@ -199,26 +202,58 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
     if (productMode === 'new' && !isEditing) {
         if (!data.new_product_name) { toast('New product name is required.'); return; }
         
+        // --- CATEGORY LOGIC ---
         let categoryId = data.new_product_category_id;
-        if (data.new_product_category_name && !categoryId) {
-            const cat = categories?.find(c => c.name.toLowerCase() === data.new_product_category_name?.toLowerCase());
-            if (cat) categoryId = cat.id; else { toast('Invalid category. Please select from list.'); return; }
+        if (data.new_product_category_name) {
+            let cat = categories?.find(c => c.name.toLowerCase() === data.new_product_category_name?.toLowerCase());
+            if (cat) {
+                categoryId = cat.id;
+            } else {
+                // Category does not exist, so create it
+                const { data: newCategory, error: catError } = await supabase.from('categories').insert({ name: data.new_product_category_name }).select('id').single();
+                if (catError) { toast(`Error creating new category: ${catError.message}`); return; }
+                categoryId = newCategory.id;
+                queryClient.invalidateQueries({ queryKey: ['categoriesList'] });
+            }
         }
 
+        // --- UNIT LOGIC ---
         let unitId = data.new_product_unit_id;
-        if (data.new_product_unit_name && !unitId) {
-            const unit = units?.find(u => `${u.name} (${u.abbreviation})`.toLowerCase() === data.new_product_unit_name?.toLowerCase());
-            if (unit) unitId = unit.id; else { toast('Invalid unit. Please select from list.'); return; }
+        if (data.new_product_unit_name) {
+            let unit = units?.find(u => `${u.name} (${u.abbreviation})`.toLowerCase() === data.new_product_unit_name?.toLowerCase());
+            if (unit) {
+                unitId = unit.id;
+            } else {
+                // Unit does not exist, so create it
+                let newUnitName = data.new_product_unit_name.trim();
+                let newUnitAbbr = '';
+                const match = newUnitName.match(/(.*) \((.*)\)/);
+                if (match) {
+                    newUnitName = match[1].trim();
+                    newUnitAbbr = match[2].trim();
+                } else {
+                    newUnitAbbr = newUnitName.substring(0, 4).toUpperCase();
+                }
+
+                if (!newUnitName || !newUnitAbbr) {
+                  toast('Invalid unit format. Please use "Name (Abbr)" or just a name.'); return;
+                }
+
+                const { data: newUnit, error: unitError } = await supabase.from('units').insert({ name: newUnitName, abbreviation: newUnitAbbr }).select('id').single();
+                if (unitError) { toast(`Error creating new unit: ${unitError.message}`); return; }
+                unitId = newUnit.id;
+                queryClient.invalidateQueries({ queryKey: ['unitsList'] });
+            }
         }
 
         const newProduct: ProductInsert = {
             name: data.new_product_name,
             description: null,
             hsn_code: data.new_product_hsn_code || null,
-            sku: null,
+            sku: data.new_product_sku?.trim() || null,
             tax_rate: (data.new_product_tax_rate || 0) / 100,
             stock_quantity: 0,
-            unit_price: 0,
+            unit_price: 0, // Selling price defaults to 0 as requested
             unit_id: unitId || null,
             category_id: categoryId || null,
         };
@@ -274,7 +309,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
                 </ul>
               </div>
             )}
-            {/* FIX: Removed optional chaining to resolve ReactNode type error */}
             {errors.product_name && <p className="mt-1 text-sm text-red-500">{errors.product_name.message}</p>}
         </div>
       ) : (
@@ -283,7 +317,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
             <div>
                 <label htmlFor="new_product_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Product Name</label>
                 <Input id="new_product_name" {...register('new_product_name', { required: productMode === 'new' ? 'Product name is required.' : false })} />
-                {/* FIX: Removed optional chaining to resolve ReactNode type error */}
                 {errors.new_product_name && <p className="mt-1 text-sm text-red-500">{errors.new_product_name.message}</p>}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -292,31 +325,38 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
                   <Input id="new_product_hsn_code" {...register('new_product_hsn_code')} />
                 </div>
                 <div>
+                  <label htmlFor="new_product_sku" className="block text-sm font-medium text-gray-700 dark:text-gray-300">SKU</label>
+                  <Input id="new_product_sku" {...register('new_product_sku', {
+                    validate: value => (value && value.trim().length === 0) ? 'SKU cannot be only whitespace.' : true,
+                  })} />
+                  {errors.new_product_sku && <p className="mt-1 text-sm text-red-500">{errors.new_product_sku.message}</p>}
+                </div>
+                <div>
                   <label htmlFor="new_product_tax_rate" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tax Rate (%)</label>
                   <Input id="new_product_tax_rate" type="number" step="0.01" {...register('new_product_tax_rate', { valueAsNumber: true, min: 0, max: 100 })} />
                 </div>
-                <div className="relative" ref={categorySuggestionsRef}>
-                    <label htmlFor="new_product_category_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
-                    <Input id="new_product_category_name" {...register('new_product_category_name')} disabled={isLoadingCategories} placeholder={isLoadingCategories ? 'Loading...' : 'Type to search'} onFocus={() => setShowCategorySuggestions(true)} autoComplete="off" />
-                    {showCategorySuggestions && categoryNameValue && (
-                        <div className="absolute z-10 w-full mt-1.5 rounded-lg bg-white shadow-xl ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700">
-                            <ul className="max-h-60 overflow-y-auto text-sm p-1">
-                                {isLoadingCategories && <li className="px-3 py-2.5 text-slate-500 italic">Loading...</li>}
-                                {!isLoadingCategories && filteredCategories.length === 0 && <li className="px-3 py-2.5 text-slate-500 italic">No categories found.</li>}
-                                {!isLoadingCategories && filteredCategories.map(c => <li key={c.id} className="px-3 py-2.5 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors duration-150" onClick={() => handleCategorySuggestionClick(c)} onMouseDown={(e) => e.preventDefault()}>{highlightMatch(c.name, categoryNameValue)}</li>)}
-                            </ul>
-                        </div>
-                    )}
-                </div>
                 <div className="relative" ref={unitSuggestionsRef}>
                     <label htmlFor="new_product_unit_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Unit</label>
-                    <Input id="new_product_unit_name" {...register('new_product_unit_name')} disabled={isLoadingUnits} placeholder={isLoadingUnits ? 'Loading...' : 'Type to search'} onFocus={() => setShowUnitSuggestions(true)} autoComplete="off" />
+                    <Input id="new_product_unit_name" {...register('new_product_unit_name')} disabled={isLoadingUnits} placeholder={isLoadingUnits ? 'Loading...' : 'Type to search or create'} onFocus={() => setShowUnitSuggestions(true)} autoComplete="off" />
                     {showUnitSuggestions && unitNameValue && (
                         <div className="absolute z-10 w-full mt-1.5 rounded-lg bg-white shadow-xl ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700">
                             <ul className="max-h-60 overflow-y-auto text-sm p-1">
                                 {isLoadingUnits && <li className="px-3 py-2.5 text-slate-500 italic">Loading...</li>}
-                                {!isLoadingUnits && filteredUnits.length === 0 && <li className="px-3 py-2.5 text-slate-500 italic">No units found.</li>}
+                                {!isLoadingUnits && filteredUnits.length === 0 && <li className="px-3 py-2.5 text-slate-500 italic">No units found. Type to create.</li>}
                                 {!isLoadingUnits && filteredUnits.map(u => <li key={u.id} className="px-3 py-2.5 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors duration-150" onClick={() => handleUnitSuggestionClick(u)} onMouseDown={(e) => e.preventDefault()}>{highlightMatch(`${u.name} (${u.abbreviation})`, unitNameValue)}</li>)}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+                <div className="relative md:col-span-2" ref={categorySuggestionsRef}>
+                    <label htmlFor="new_product_category_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                    <Input id="new_product_category_name" {...register('new_product_category_name')} disabled={isLoadingCategories} placeholder={isLoadingCategories ? 'Loading...' : 'Type to search or create'} onFocus={() => setShowCategorySuggestions(true)} autoComplete="off" />
+                    {showCategorySuggestions && categoryNameValue && (
+                        <div className="absolute z-10 w-full mt-1.5 rounded-lg bg-white shadow-xl ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700">
+                            <ul className="max-h-60 overflow-y-auto text-sm p-1">
+                                {isLoadingCategories && <li className="px-3 py-2.5 text-slate-500 italic">Loading...</li>}
+                                {!isLoadingCategories && filteredCategories.length === 0 && <li className="px-3 py-2.5 text-slate-500 italic">No categories found. Type to create.</li>}
+                                {!isLoadingCategories && filteredCategories.map(c => <li key={c.id} className="px-3 py-2.5 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors duration-150" onClick={() => handleCategorySuggestionClick(c)} onMouseDown={(e) => e.preventDefault()}>{highlightMatch(c.name, categoryNameValue)}</li>)}
                             </ul>
                         </div>
                     )}

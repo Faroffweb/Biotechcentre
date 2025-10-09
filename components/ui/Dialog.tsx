@@ -47,10 +47,10 @@ const Dialog = React.forwardRef<HTMLDivElement, DialogProps>(
         {...props}
       >
         <div
-          className={`relative w-full ${sizeClasses[size]} m-4 bg-white rounded-lg shadow-xl dark:bg-gray-800 max-h-[90vh] flex flex-col animate-scale-in`}
+          className={`relative w-full ${sizeClasses[size]} m-4 bg-white rounded-lg shadow-xl dark:bg-gray-800 max-h-[90vh] flex flex-col animate-scale-in overflow-y-auto`}
           onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside the modal
         >
-          <div className="flex items-center justify-between p-4 border-b dark:border-gray-700 shrink-0">
+          <div className="flex items-center justify-between p-4 border-b dark:border-gray-700 shrink-0 sticky top-0 bg-white dark:bg-gray-800 z-10">
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
             <button
               type="button"
@@ -61,7 +61,7 @@ const Dialog = React.forwardRef<HTMLDivElement, DialogProps>(
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="p-6 overflow-y-auto">
+          <div className="p-6">
             {children}
           </div>
         </div>

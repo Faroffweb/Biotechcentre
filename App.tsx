@@ -15,6 +15,7 @@ import UnitsPage from './pages/UnitsPage';
 import CategoriesPage from './pages/CategoriesPage';
 import ProductStockReportPage from './pages/ProductStockReportPage';
 import CompanySettingsPage from './pages/CompanySettingsPage';
+import CreateInvoicePage from './pages/CreateInvoicePage';
 
 const App: React.FC = () => {
   return (
@@ -24,6 +25,8 @@ const App: React.FC = () => {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
+          <Route path="invoices/new" element={<CreateInvoicePage />} />
+          <Route path="invoices/edit/:invoiceId" element={<CreateInvoicePage />} />
           <Route path="inventory" element={<ProductsPage />} />
           <Route path="stock" element={<StockPage />} />
           <Route path="stock/:productId" element={<ProductStockReportPage />} />

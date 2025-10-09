@@ -1,5 +1,3 @@
-
-
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -10,7 +8,6 @@ import { Button } from './ui/Button';
 import { toast } from './ui/Toaster';
 import { Trash2 } from 'lucide-react';
 import { formatCurrency } from '../hooks/lib/utils';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/Table';
 
 // This type definition should match the one in InvoicesPage.tsx for prop compatibility
 type FullInvoice = Invoice & {
@@ -33,9 +30,8 @@ type FormValues = {
     product_id: string;
     product_name_display: string; // For the search input
     quantity: number;
-    unit_price: number; // PRE-TAX unit price
+    unit_price: number; // PRE-TAX unit price is now the source of truth
     tax_rate: number;
-    inclusive_rate_display: number; // For the controlled input
   }[];
   // New customer fields
   new_customer_name?: string;
@@ -64,7 +60,7 @@ const upsertInvoice = async ({ formData, id }: { formData: Omit<FormValues, 'new
         invoice_number: formData.invoice_number,
     };
     
-    const itemsToSave = formData.items.map(({ inclusive_rate_display, product_name_display, ...rest }) => rest);
+    const itemsToSave = formData.items.map(({ product_name_display, ...rest }) => rest);
 
     if (id) {
         // Update
@@ -103,7 +99,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
     reset,
     watch,
     setValue,
-    getValues,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     defaultValues: {
@@ -126,17 +121,13 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
         customer_name_display: invoice.customers?.name || '',
         invoice_date: new Date(invoice.invoice_date).toISOString().split('T')[0],
         invoice_number: invoice.invoice_number,
-        items: invoice.invoice_items.map(item => {
-          const inclusiveRate = item.unit_price * (1 + item.tax_rate);
-          return {
+        items: invoice.invoice_items.map(item => ({
             product_id: item.product_id,
             product_name_display: item.products?.name || '',
             quantity: item.quantity,
-            unit_price: item.unit_price,
+            unit_price: item.unit_price, // pre-tax price from DB
             tax_rate: item.tax_rate,
-            inclusive_rate_display: parseFloat(inclusiveRate.toFixed(2)),
-          };
-        }),
+        })),
       });
     } else {
        setCustomerMode('existing');
@@ -145,47 +136,10 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
         customer_name_display: '',
         invoice_date: new Date().toISOString().split('T')[0],
         invoice_number: '',
-        items: [{ product_id: '', product_name_display: '', quantity: 1, unit_price: 0, tax_rate: 0, inclusive_rate_display: 0 }],
+        items: [{ product_id: '', product_name_display: '', quantity: 1, unit_price: 0, tax_rate: 0 }],
       });
     }
   }, [invoice, reset]);
-  
-  // This useEffect hook handles the real-time calculation for the 'Rate (GST Incl.)' field.
-  // It uses a `watch` subscription, which is an efficient way to react to specific form
-  // field changes without causing unnecessary re-renders of the entire component.
-  useEffect(() => {
-    const subscription = watch((value, { name, type }) => {
-      // We only want to trigger this logic when a user actively types into the inclusive rate field.
-      // Changes to quantity are handled declaratively during the render cycle, as they don't require
-      // deriving another form value—they directly impact the calculated totals.
-      if (type !== 'change' || !name || !name.startsWith('items.') || !name.endsWith('.inclusive_rate_display')) {
-        return;
-      }
-
-      const parts = name.split('.');
-      const index = parseInt(parts[1], 10);
-      const item = value.items?.[index];
-
-      if (item) {
-        // This is the core logic: The user enters a final price that includes GST.
-        // We then perform a reverse calculation to determine the pre-tax `unit_price`,
-        // which is the taxable value stored in the form state and used for all other calculations.
-        const newUnitPrice = (1 + (item.tax_rate || 0)) > 0 
-          ? (item.inclusive_rate_display || 0) / (1 + (item.tax_rate || 0)) 
-          : 0;
-
-        // To prevent an infinite update loop, we only call `setValue` if the newly calculated
-        // unit price is actually different from the one already in the form state.
-        // `getValues` is used here to read the current state without triggering a re-render itself.
-        if (Math.abs(newUnitPrice - (getValues(`items.${index}.unit_price`) || 0)) > 1e-5) {
-          setValue(`items.${index}.unit_price`, newUnitPrice, { shouldDirty: true });
-        }
-      }
-    });
-
-    // Clean up the subscription when the component unmounts to prevent memory leaks.
-    return () => subscription.unsubscribe();
-  }, [watch, setValue, getValues]);
   
   // Close suggestions on outside click
   useEffect(() => {
@@ -214,27 +168,14 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
   };
 
   const handleProductSelect = (index: number, product: Product) => {
-    // When a product is selected, update the form fields for that item row.
-    // This ensures the correct pre-tax price and tax rate are used for all calculations.
-    
-    // Calculate the GST-inclusive rate based on the product's base price and tax rate.
-    const inclusiveRate = product.unit_price * (1 + product.tax_rate);
-
-    // Get the current quantity, defaulting to 1 if not set.
     const currentQuantity = watchedItems[index]?.quantity || 1;
 
-    // Update the entire item object in the form state.
     update(index, {
       product_id: product.id,
       product_name_display: product.name,
       quantity: currentQuantity,
-      
-      // Set the core financial data from the selected product.
-      unit_price: product.unit_price, // The pre-tax unit price.
-      tax_rate: product.tax_rate,     // The tax rate as a decimal (e.g., 0.18 for 18%).
-      
-      // Update the user-facing 'Rate (GST Incl.)' field.
-      inclusive_rate_display: parseFloat(inclusiveRate.toFixed(2)),
+      unit_price: product.unit_price, // Set the pre-tax unit price
+      tax_rate: product.tax_rate,
     });
     
     setActiveSuggestionBox(null);
@@ -274,7 +215,9 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
     
     let finalCustomerId: string | null = data.customer_id;
     if (customerMode === 'existing' && !finalCustomerId) {
-        toast('Please select a valid customer from the list.'); return;
+        const matchingCustomer = customers?.find(c => c.name.toLowerCase() === data.customer_name_display.toLowerCase());
+        if (!matchingCustomer) { toast('Please select a valid customer from the list.'); return; }
+        finalCustomerId = matchingCustomer.id;
     }
 
     if (customerMode === 'new') {
@@ -364,41 +307,47 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
           </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-2">
         <h3 className="text-lg font-medium text-gray-900 dark:text-white">Items</h3>
-        <div className="border rounded-lg dark:border-gray-700 overflow-x-auto min-h-64">
-          <Table>
-            <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>HSN</TableHead><TableHead>Qty</TableHead><TableHead>Rate (GST Incl.)</TableHead><TableHead>Amount</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {fields.map((field, index) => {
-                 const item = watchedItems[index];
-                 const product = products?.find(p => p.id === item?.product_id);
-                 const amount = (item?.quantity || 0) * (item?.unit_price || 0);
-                 const productNameQuery = item?.product_name_display || '';
+        
+        {/* Responsive Header */}
+        <div className="hidden md:flex bg-slate-50 dark:bg-slate-800/50 p-2 rounded-t-lg text-sm font-semibold text-slate-600 dark:text-slate-300">
+            <div className="flex-1 min-w-[200px] px-2">Product</div>
+            <div className="w-24 px-2">HSN</div>
+            <div className="w-20 px-2">Qty</div>
+            <div className="w-20 px-2">Unit</div>
+            <div className="w-28 px-2">Rate</div>
+            <div className="w-28 px-2">Taxable Amt.</div>
+            <div className="w-20 px-2">GST</div>
+            <div className="w-28 px-2">Total</div>
+            <div className="w-10 px-2 text-right"></div>
+        </div>
 
-                 let filteredProducts: Product[] = [];
-                 if (productNameQuery && products) {
-                    // The previous logic incorrectly hid suggestions when an exact match was typed.
-                    // This new logic simply filters all products that include the search query.
-                    filteredProducts = products.filter(p =>
-                      p.name.toLowerCase().includes(productNameQuery.toLowerCase())
-                    );
-                 }
+        <div className="border rounded-lg dark:border-gray-700 divide-y dark:divide-gray-700 md:border-t-0 md:rounded-t-none">
+          {fields.map((field, index) => {
+             const item = watchedItems[index];
+             const product = products?.find(p => p.id === item?.product_id);
+             const taxableAmount = (item?.quantity || 0) * (item?.unit_price || 0);
+             const totalAmount = taxableAmount * (1 + (item?.tax_rate || 0));
+             const productNameQuery = item?.product_name_display || '';
 
-                return (
-                <TableRow key={field.id} className="bg-white dark:bg-gray-800 align-top">
-                  <TableCell className="p-2 whitespace-nowrap" style={{minWidth: '200px'}}>
+             let filteredProducts: Product[] = [];
+             if (productNameQuery && products) {
+                filteredProducts = products.filter(p => p.name.toLowerCase().includes(productNameQuery.toLowerCase()));
+             }
+
+            return (
+              <div key={field.id} className="p-2">
+                <div className="flex flex-wrap items-start gap-x-2 gap-y-2">
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="text-xs font-medium text-slate-500 md:hidden">Product</label>
                     <div className="relative">
                       <Input {...register(`items.${index}.product_name_display`, { required: true })} disabled={isLoadingProducts} placeholder="Type to search..." onFocus={() => setActiveSuggestionBox({ type: 'product', index })} autoComplete="off" />
                       {activeSuggestionBox?.type === 'product' && activeSuggestionBox.index === index && filteredProducts.length > 0 && (
                           <div className="absolute z-20 w-full mt-1.5 rounded-lg bg-white shadow-xl ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700">
                               <ul className="max-h-60 overflow-y-auto text-sm p-1">
                                   {filteredProducts.map(p => 
-                                    <li key={p.id} 
-                                      className="px-3 py-2.5 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-gray-700" 
-                                      onMouseDown={(e) => e.preventDefault()}
-                                      onClick={() => handleProductSelect(index, p)}
-                                    >
+                                    <li key={p.id} className="px-3 py-2.5 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-gray-700" onMouseDown={(e) => e.preventDefault()} onClick={() => handleProductSelect(index, p)}>
                                       {highlightMatch(p.name, productNameQuery)}
                                     </li>
                                   )}
@@ -406,18 +355,25 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
                           </div>
                       )}
                     </div>
-                  </TableCell>
-                  <TableCell className="p-2"><Input value={product?.hsn_code || ''} readOnly className="w-24 bg-slate-100 dark:bg-slate-700/50" /></TableCell>
-                  <TableCell className="p-2"><div className="flex items-start"><Input type="number" {...register(`items.${index}.quantity`, { required: true, valueAsNumber: true, min: 1 })} className="w-20" /><span className="ml-2 mt-2 text-sm text-gray-500 whitespace-nowrap">{product?.units?.abbreviation || ''}</span></div></TableCell>
-                  <TableCell className="p-2"><Input type="number" step="0.01" {...register(`items.${index}.inclusive_rate_display`, { valueAsNumber: true, validate: v => v >= 0 || 'Rate must be non-negative' })} className="w-28" disabled={!item?.product_id} /></TableCell>
-                  <TableCell className="p-2"><Input value={formatCurrency(amount)} readOnly className="w-28 bg-slate-100 dark:bg-slate-700/50" /></TableCell>
-                  <TableCell className="p-2 text-right"><Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><Trash2 className="w-4 h-4 text-red-500" /></Button></TableCell>
-                </TableRow>
-              )})}
-            </TableBody>
-          </Table>
+                  </div>
+                  <div className="w-24"> <label className="text-xs font-medium text-slate-500 md:hidden">HSN</label> <Input value={product?.hsn_code || ''} readOnly className="bg-slate-100 dark:bg-slate-700/50"/></div>
+                  <div className="w-20"> <label className="text-xs font-medium text-slate-500 md:hidden">Qty</label> <Input type="number" {...register(`items.${index}.quantity`, { required: true, valueAsNumber: true, min: 1 })} /></div>
+                  <div className="w-20"> <label className="text-xs font-medium text-slate-500 md:hidden">Unit</label> <Input value={product?.units?.abbreviation || ''} readOnly className="bg-slate-100 dark:bg-slate-700/50"/></div>
+                  <div className="w-28"> <label className="text-xs font-medium text-slate-500 md:hidden">Rate</label> <Input type="number" step="0.01" {...register(`items.${index}.unit_price`, { valueAsNumber: true, validate: v => v >= 0 || 'Rate must be non-negative' })} disabled={!item?.product_id} /></div>
+                  <div className="w-28"> <label className="text-xs font-medium text-slate-500 md:hidden">Taxable</label> <Input value={formatCurrency(taxableAmount)} readOnly className="bg-slate-100 dark:bg-slate-700/50"/></div>
+                  <div className="w-20"> <label className="text-xs font-medium text-slate-500 md:hidden">GST</label> <Input value={`${((item?.tax_rate || 0) * 100).toFixed(2)}%`} readOnly className="bg-slate-100 dark:bg-slate-700/50"/></div>
+                  <div className="w-28"> <label className="text-xs font-medium text-slate-500 md:hidden">Total</label> <Input value={formatCurrency(totalAmount)} readOnly className="bg-slate-100 dark:bg-slate-700/50"/></div>
+                  
+                  {/* Action button container */}
+                  <div className="w-full md:w-auto self-center flex-grow flex justify-end">
+                     <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
-        <Button type="button" variant="outline" onClick={() => append({ product_id: '', product_name_display: '', quantity: 1, unit_price: 0, tax_rate: 0, inclusive_rate_display: 0 })}>Add Item</Button>
+        <Button type="button" variant="outline" onClick={() => append({ product_id: '', product_name_display: '', quantity: 1, unit_price: 0, tax_rate: 0 })}>Add Item</Button>
       </div>
 
       {/* Invoice Totals Summary */}
