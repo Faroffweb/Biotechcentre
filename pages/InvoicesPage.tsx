@@ -47,15 +47,28 @@ const fetchInvoices = async (page: number, searchTerm: string): Promise<{ data: 
   return { data: data as InvoiceWithDetails[], count: count || 0 };
 };
 
+// Fetches a single, complete invoice record directly from the database using its ID.
+// This is an optimized query that uses `.eq()` and `.single()` to avoid fetching unnecessary data,
+// ensuring high performance when viewing or editing an individual invoice.
 const fetchInvoiceWithItems = async (invoiceId: string): Promise<FullInvoice> => {
   const { data, error } = await supabase
     .from('invoices')
-    .select('*, customers(*), invoice_items(*, products(name, hsn_code, units(abbreviation)))')
+    .select(`
+      *,
+      customers(*),
+      invoice_items(*, products(name, hsn_code, units(abbreviation)))
+    `)
     .eq('id', invoiceId)
     .single();
-  if (error) throw new Error(error.message);
+
+  if (error) {
+    console.error('Error fetching single invoice:', error);
+    throw new Error(`Could not fetch invoice details: ${error.message}`);
+  }
+  
   return data as FullInvoice;
-}
+};
+
 
 const fetchCompanyDetails = async (): Promise<CompanyDetails | null> => {
     const { data, error } = await supabase

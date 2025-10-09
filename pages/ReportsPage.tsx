@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from '../components/ui/Badge';
 import Pagination from '../components/ui/Pagination';
 import Skeleton from '../components/ui/Skeleton';
-import { formatDate, formatCurrency } from '../hooks/lib/utils';
+import { formatDate } from '../hooks/lib/utils';
 import { Download, ChevronDown } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 15;
@@ -22,8 +22,6 @@ type ReportDataItem = {
     reference_number: string;
     product_name: string;
     quantity_change: number;
-    transaction_value: number | null;
-    details: string;
 };
 
 const fetchReportData = async ({ page, transactionType, startDate, endDate }: { page: number, transactionType: string, startDate: string, endDate: string })
@@ -106,7 +104,7 @@ const ReportsPage: React.FC = () => {
 
     const renderSkeleton = () => (
         <Table>
-            <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Product</TableHead><TableHead>Quantity</TableHead><TableHead>Reference</TableHead><TableHead>Value</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Product</TableHead><TableHead>Quantity</TableHead><TableHead>Reference #</TableHead></TableRow></TableHeader>
             <TableBody>
                 {Array.from({ length: 10 }).map((_, i) => (
                     <TableRow key={i}>
@@ -115,7 +113,6 @@ const ReportsPage: React.FC = () => {
                         <TableCell><Skeleton className="h-5 w-40" /></TableCell>
                         <TableCell><Skeleton className="h-5 w-12" /></TableCell>
                         <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                     </TableRow>
                 ))}
             </TableBody>
@@ -196,8 +193,6 @@ const ReportsPage: React.FC = () => {
                       <TableHead>Product</TableHead>
                       <TableHead>Quantity</TableHead>
                       <TableHead>Reference #</TableHead>
-                      <TableHead>Details</TableHead>
-                      <TableHead className="text-right">Value (Taxable)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -214,14 +209,10 @@ const ReportsPage: React.FC = () => {
                             {item.quantity_change > 0 ? `+${item.quantity_change}` : item.quantity_change}
                         </TableCell>
                         <TableCell data-label="Reference #">{item.reference_number || 'N/A'}</TableCell>
-                        <TableCell data-label="Details">{item.details || 'N/A'}</TableCell>
-                        <TableCell data-label="Value" className="text-right">
-                            {item.transaction_value !== null ? formatCurrency(item.transaction_value) : 'N/A'}
-                        </TableCell>
                       </TableRow>
                     )) : (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center h-24">No transactions found for the selected filters.</TableCell>
+                        <TableCell colSpan={5} className="text-center h-24">No transactions found for the selected filters.</TableCell>
                       </TableRow>
                     )}
                   </TableBody>

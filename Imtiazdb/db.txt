@@ -276,6 +276,8 @@ FOR EACH ROW
 EXECUTE FUNCTION public.update_stock_on_sale();
 
 -- Function to get a combined, paginated report of sales and purchases.
+-- This version is simplified to only return essential stock movement data,
+-- improving performance by removing joins and unnecessary columns.
 CREATE OR REPLACE FUNCTION get_combined_report(
     p_start_date date,
     p_end_date date,
@@ -289,9 +291,7 @@ RETURNS TABLE (
     transaction_type text,
     reference_number text,
     product_name text,
-    quantity_change integer,
-    transaction_value numeric,
-    details text
+    quantity_change integer
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -303,13 +303,10 @@ BEGIN
             'Sale' AS transaction_type,
             i.invoice_number AS reference_number,
             p.name AS product_name,
-            -ii.quantity AS quantity_change,
-            (ii.quantity * ii.unit_price) AS transaction_value,
-            c.name AS details
+            -ii.quantity AS quantity_change
         FROM public.invoice_items ii
         JOIN public.invoices i ON ii.invoice_id = i.id
         JOIN public.products p ON ii.product_id = p.id
-        LEFT JOIN public.customers c ON i.customer_id = c.id
         WHERE (p_transaction_type = 'all' OR p_transaction_type = 'sale')
           AND i.invoice_date >= p_start_date
           AND i.invoice_date <= p_end_date
@@ -323,9 +320,7 @@ BEGIN
             'Purchase' AS transaction_type,
             pu.reference_invoice AS reference_number,
             p.name AS product_name,
-            pu.quantity AS quantity_change,
-            NULL AS transaction_value, -- No purchase price in schema
-            'Stock In' AS details
+            pu.quantity AS quantity_change
         FROM public.purchases pu
         JOIN public.products p ON pu.product_id = p.id
         WHERE (p_transaction_type = 'all' OR p_transaction_type = 'purchase')

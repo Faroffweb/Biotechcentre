@@ -91,7 +91,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
   const queryClient = useQueryClient();
   const [customerMode, setCustomerMode] = useState<'existing' | 'new' | 'guest'>('existing');
   const [activeSuggestionBox, setActiveSuggestionBox] = useState<{ type: 'customer' | 'product', index?: number } | null>(null);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
+  const suggestionsRef = useRef<HTMLFormElement>(null);
 
   const { data: customers, isLoading: isLoadingCustomers } = useQuery({ queryKey: ['customersList'], queryFn: fetchCustomers });
   const { data: products, isLoading: isLoadingProducts } = useQuery({ queryKey: ['productsListAll'], queryFn: fetchProducts });
@@ -150,21 +150,40 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
     }
   }, [invoice, reset]);
   
-  // Real-time calculation for inclusive rate
+  // This useEffect hook handles the real-time calculation for the 'Rate (GST Incl.)' field.
+  // It uses a `watch` subscription, which is an efficient way to react to specific form
+  // field changes without causing unnecessary re-renders of the entire component.
   useEffect(() => {
-    const subscription = watch((value, { name }) => {
-      if (name && name.startsWith('items.') && name.endsWith('.inclusive_rate_display')) {
-        const parts = name.split('.');
-        const index = parseInt(parts[1], 10);
-        const item = value.items?.[index];
-        if (item) {
-          const newUnitPrice = (1 + (item.tax_rate || 0)) > 0 ? (item.inclusive_rate_display || 0) / (1 + (item.tax_rate || 0)) : 0;
-          if (Math.abs(newUnitPrice - (getValues(`items.${index}.unit_price`) || 0)) > 1e-5) {
-            setValue(`items.${index}.unit_price`, newUnitPrice, { shouldDirty: true });
-          }
+    const subscription = watch((value, { name, type }) => {
+      // We only want to trigger this logic when a user actively types into the inclusive rate field.
+      // Changes to quantity are handled declaratively during the render cycle, as they don't require
+      // deriving another form value—they directly impact the calculated totals.
+      if (type !== 'change' || !name || !name.startsWith('items.') || !name.endsWith('.inclusive_rate_display')) {
+        return;
+      }
+
+      const parts = name.split('.');
+      const index = parseInt(parts[1], 10);
+      const item = value.items?.[index];
+
+      if (item) {
+        // This is the core logic: The user enters a final price that includes GST.
+        // We then perform a reverse calculation to determine the pre-tax `unit_price`,
+        // which is the taxable value stored in the form state and used for all other calculations.
+        const newUnitPrice = (1 + (item.tax_rate || 0)) > 0 
+          ? (item.inclusive_rate_display || 0) / (1 + (item.tax_rate || 0)) 
+          : 0;
+
+        // To prevent an infinite update loop, we only call `setValue` if the newly calculated
+        // unit price is actually different from the one already in the form state.
+        // `getValues` is used here to read the current state without triggering a re-render itself.
+        if (Math.abs(newUnitPrice - (getValues(`items.${index}.unit_price`) || 0)) > 1e-5) {
+          setValue(`items.${index}.unit_price`, newUnitPrice, { shouldDirty: true });
         }
       }
     });
+
+    // Clean up the subscription when the component unmounts to prevent memory leaks.
     return () => subscription.unsubscribe();
   }, [watch, setValue, getValues]);
   
@@ -271,7 +290,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" ref={suggestionsRef}>
       <div className="space-y-4">
         <div className="flex items-center space-x-4">
             <h3 className="text-lg font-medium text-gray-900 dark:text-white">Customer</h3>
@@ -283,13 +302,21 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
         </div>
 
         {customerMode === 'existing' && (
-            <div className="relative" ref={suggestionsRef}>
+            <div className="relative">
               <label htmlFor="customer_name_display" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Customer</label>
               <Input id="customer_name_display" {...register('customer_name_display', { required: 'Customer name is required' })} disabled={isLoadingCustomers} placeholder="Type to search..." onFocus={() => setActiveSuggestionBox({ type: 'customer' })} autoComplete="off" />
               {activeSuggestionBox?.type === 'customer' && filteredCustomers.length > 0 && (
                   <div className="absolute z-10 w-full mt-1.5 rounded-lg bg-white shadow-xl ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700">
                       <ul className="max-h-60 overflow-y-auto text-sm p-1">
-                          {filteredCustomers.map(c => <li key={c.id} className="px-3 py-2.5 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-gray-700" onClick={() => handleCustomerSelect(c)}>{highlightMatch(c.name, customerNameDisplay)}</li>)}
+                          {filteredCustomers.map(c => 
+                            <li key={c.id} 
+                              className="px-3 py-2.5 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-gray-700" 
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleCustomerSelect(c)}
+                            >
+                              {highlightMatch(c.name, customerNameDisplay)}
+                            </li>
+                          )}
                       </ul>
                   </div>
               )}
@@ -339,7 +366,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
 
       <div className="space-y-4">
         <h3 className="text-lg font-medium text-gray-900 dark:text-white">Items</h3>
-        <div className="border rounded-lg dark:border-gray-700 overflow-x-auto">
+        <div className="border rounded-lg dark:border-gray-700 overflow-x-auto min-h-64">
           <Table>
             <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>HSN</TableHead><TableHead>Qty</TableHead><TableHead>Rate (GST Incl.)</TableHead><TableHead>Amount</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
             <TableBody>
@@ -349,25 +376,32 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
                  const amount = (item?.quantity || 0) * (item?.unit_price || 0);
                  const productNameQuery = item?.product_name_display || '';
 
-                 // FIX: Removed useMemo hook from inside a loop to prevent conditional hook rendering, which causes React error #310.
-                 // The filtering logic is now executed on every render, which is acceptable for this use case.
                  let filteredProducts: Product[] = [];
                  if (productNameQuery && products) {
-                    const isExactMatch = products.some(p => p.name.toLowerCase() === productNameQuery.toLowerCase());
-                    if (!isExactMatch) {
-                        filteredProducts = products.filter(p => p.name.toLowerCase().includes(productNameQuery.toLowerCase()));
-                    }
+                    // The previous logic incorrectly hid suggestions when an exact match was typed.
+                    // This new logic simply filters all products that include the search query.
+                    filteredProducts = products.filter(p =>
+                      p.name.toLowerCase().includes(productNameQuery.toLowerCase())
+                    );
                  }
 
                 return (
                 <TableRow key={field.id} className="bg-white dark:bg-gray-800 align-top">
                   <TableCell className="p-2 whitespace-nowrap" style={{minWidth: '200px'}}>
-                    <div className="relative" ref={suggestionsRef}>
+                    <div className="relative">
                       <Input {...register(`items.${index}.product_name_display`, { required: true })} disabled={isLoadingProducts} placeholder="Type to search..." onFocus={() => setActiveSuggestionBox({ type: 'product', index })} autoComplete="off" />
                       {activeSuggestionBox?.type === 'product' && activeSuggestionBox.index === index && filteredProducts.length > 0 && (
                           <div className="absolute z-20 w-full mt-1.5 rounded-lg bg-white shadow-xl ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700">
                               <ul className="max-h-60 overflow-y-auto text-sm p-1">
-                                  {filteredProducts.map(p => <li key={p.id} className="px-3 py-2.5 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-gray-700" onMouseDown={() => handleProductSelect(index, p)}>{highlightMatch(p.name, productNameQuery)}</li>)}
+                                  {filteredProducts.map(p => 
+                                    <li key={p.id} 
+                                      className="px-3 py-2.5 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-gray-700" 
+                                      onMouseDown={(e) => e.preventDefault()}
+                                      onClick={() => handleProductSelect(index, p)}
+                                    >
+                                      {highlightMatch(p.name, productNameQuery)}
+                                    </li>
+                                  )}
                               </ul>
                           </div>
                       )}
