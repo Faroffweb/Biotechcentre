@@ -92,7 +92,7 @@ CREATE TABLE public.invoices (
     id uuid NOT NULL DEFAULT gen_random_uuid(),
     user_id uuid, -- Made nullable for public access
     created_at timestamp with time zone NOT NULL DEFAULT now(),
-    customer_id uuid NOT NULL,
+    customer_id uuid, -- Now nullable for guest/anonymous invoices
     invoice_number text NOT NULL,
     invoice_date date NOT NULL,
     total_amount numeric NOT NULL DEFAULT 0,
@@ -141,25 +141,59 @@ BEFORE INSERT ON public.invoice_items
 FOR EACH ROW
 EXECUTE FUNCTION public.set_invoice_item_user_id();
 
--- Function to automatically calculate and update the total_amount on an invoice
+-- Function to automatically calculate and update the total_amount on an invoice (INCREMENTAL)
+-- This function is optimized for performance. It performs incremental updates to the invoice's
+-- total_amount, avoiding a full recalculation of all items. This ensures that even invoices
+-- with many line items are updated efficiently.
 CREATE OR REPLACE FUNCTION public.update_invoice_totals()
 RETURNS TRIGGER AS $$
 DECLARE
-    invoice_id_to_update uuid;
+    old_item_total numeric;
+    new_item_total numeric;
 BEGIN
-    IF (TG_OP = 'DELETE') THEN
-        invoice_id_to_update := OLD.invoice_id;
-    ELSE
-        invoice_id_to_update := NEW.invoice_id;
+    -- On INSERT, add only the new item's total to the invoice total.
+    IF (TG_OP = 'INSERT') THEN
+        new_item_total := NEW.quantity * NEW.unit_price * (1 + NEW.tax_rate);
+        UPDATE public.invoices
+        SET total_amount = total_amount + new_item_total
+        WHERE id = NEW.invoice_id;
+        RETURN NULL;
     END IF;
 
-    UPDATE public.invoices
-    SET total_amount = (
-        SELECT COALESCE(SUM(quantity * unit_price * (1 + tax_rate)), 0)
-        FROM public.invoice_items
-        WHERE invoice_id = invoice_id_to_update
-    )
-    WHERE id = invoice_id_to_update;
+    -- On DELETE, subtract only the old item's total from the invoice total.
+    IF (TG_OP = 'DELETE') THEN
+        old_item_total := OLD.quantity * OLD.unit_price * (1 + OLD.tax_rate);
+        UPDATE public.invoices
+        SET total_amount = total_amount - old_item_total
+        WHERE id = OLD.invoice_id;
+        RETURN NULL;
+    END IF;
+
+    -- On UPDATE, calculate the difference between the old and new item totals and apply it.
+    IF (TG_OP = 'UPDATE') THEN
+        old_item_total := OLD.quantity * OLD.unit_price * (1 + OLD.tax_rate);
+        new_item_total := NEW.quantity * NEW.unit_price * (1 + NEW.tax_rate);
+
+        -- If the item is moved to a different invoice, update both old and new invoices incrementally.
+        IF OLD.invoice_id <> NEW.invoice_id THEN
+            -- Subtract from the old invoice
+            UPDATE public.invoices
+            SET total_amount = total_amount - old_item_total
+            WHERE id = OLD.invoice_id;
+
+            -- Add to the new invoice
+            UPDATE public.invoices
+            SET total_amount = total_amount + new_item_total
+            WHERE id = NEW.invoice_id;
+        ELSE
+            -- If the invoice is the same, just apply the difference for maximum efficiency.
+            UPDATE public.invoices
+            SET total_amount = total_amount - old_item_total + new_item_total
+            WHERE id = NEW.invoice_id;
+        END IF;
+        RETURN NULL;
+    END IF;
+    
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -6,7 +6,7 @@ import { InvoiceWithDetails, InvoiceItem, Invoice, Customer, Unit } from '../typ
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
-import { PlusCircle, Pencil, Trash2, Printer, Search } from 'lucide-react';
+import { PlusCircle, Pencil, Trash2, Printer, Search, Eye } from 'lucide-react';
 import { formatDate, formatCurrency } from '../hooks/lib/utils';
 import Pagination from '../components/ui/Pagination';
 import Dialog from '../components/ui/Dialog';
@@ -20,9 +20,10 @@ import Skeleton from '../components/ui/Skeleton';
 const ITEMS_PER_PAGE = 10;
 
 // This type definition must be compatible with InvoiceTemplate's props
+// FIX: Added 'phone' to the customer details in FullInvoice to match the type expected by InvoiceTemplate.
 type FullInvoice = Invoice & {
-    customers: Pick<Customer, 'name' | 'billing_address' | 'gstin'> | null;
-    invoice_items: (InvoiceItem & { products: { name: string; units?: Pick<Unit, 'abbreviation'> | null } | null })[];
+    customers: Pick<Customer, 'name' | 'billing_address' | 'gstin' | 'phone'> | null;
+    invoice_items: (InvoiceItem & { products: { name: string; hsn_code: string | null; units?: Pick<Unit, 'abbreviation'> | null } | null })[];
 };
 
 // Fetch Functions
@@ -32,7 +33,7 @@ const fetchInvoices = async (page: number, searchTerm: string): Promise<{ data: 
 
   let query = supabase
     .from('invoices')
-    .select('*, customers!inner(name)', { count: 'exact' });
+    .select('*, customers(name)', { count: 'exact' });
   
   if (searchTerm) {
     query = query.or(`invoice_number.ilike.%${searchTerm}%,customers.name.ilike.%${searchTerm}%`);
@@ -49,7 +50,7 @@ const fetchInvoices = async (page: number, searchTerm: string): Promise<{ data: 
 const fetchInvoiceWithItems = async (invoiceId: string): Promise<FullInvoice> => {
   const { data, error } = await supabase
     .from('invoices')
-    .select('*, customers(*), invoice_items(*, products(name, units(abbreviation)))')
+    .select('*, customers(*), invoice_items(*, products(name, hsn_code, units(abbreviation)))')
     .eq('id', invoiceId)
     .single();
   if (error) throw new Error(error.message);
@@ -66,18 +67,10 @@ const InvoicesPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<FullInvoice | undefined>(undefined);
   const [currentPage, setCurrentPage] = useState(1);
-  const [invoiceToPrint, setInvoiceToPrint] = useState<FullInvoice | null>(null);
-  const [isPrinting, setIsPrinting] = useState(false);
+  const [invoiceToView, setInvoiceToView] = useState<FullInvoice | null>(null);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
-  
-  useEffect(() => {
-    if (isPrinting) {
-      window.print();
-      setIsPrinting(false);
-      setInvoiceToPrint(null);
-    }
-  }, [isPrinting]);
   
   const { data: invoicesData, isLoading, error } = useQuery({
     queryKey: ['invoices', currentPage, debouncedSearchTerm],
@@ -119,13 +112,13 @@ const InvoicesPage: React.FC = () => {
     }
   };
   
-  const handlePrintClick = async (invoiceId: string) => {
+  const handleViewClick = async (invoiceId: string) => {
     try {
         const fullInvoice = await fetchInvoiceWithItems(invoiceId);
-        setInvoiceToPrint(fullInvoice);
-        setIsPrinting(true);
+        setInvoiceToView(fullInvoice);
+        setIsViewModalOpen(true);
     } catch (error: any) {
-        toast(`Error fetching invoice for printing: ${error.message}`);
+        toast(`Error fetching invoice details: ${error.message}`);
     }
   };
 
@@ -138,6 +131,11 @@ const InvoicesPage: React.FC = () => {
   const handleFormSuccess = () => {
     setIsModalOpen(false);
     setSelectedInvoice(undefined);
+  };
+  
+  const closeViewModal = () => {
+    setIsViewModalOpen(false);
+    setInvoiceToView(null);
   };
 
   const renderSkeleton = () => (
@@ -175,10 +173,7 @@ const InvoicesPage: React.FC = () => {
 
   return (
     <>
-      <div className="print-only">
-        {invoiceToPrint && <InvoiceTemplate invoice={invoiceToPrint} />}
-      </div>
-      <div className="no-print space-y-6">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 bg-clip-text text-transparent">Invoices</h1>
           <Button onClick={handleAddClick}>
@@ -220,13 +215,13 @@ const InvoicesPage: React.FC = () => {
                       {invoices.length > 0 ? invoices.map((invoice) => (
                         <TableRow key={invoice.id}>
                           <TableCell data-label="Number" className="font-medium">{invoice.invoice_number}</TableCell>
-                          <TableCell data-label="Customer">{invoice.customers?.name || 'N/A'}</TableCell>
+                          <TableCell data-label="Customer">{invoice.customers?.name || 'Guest Customer'}</TableCell>
                           <TableCell data-label="Date">{formatDate(invoice.invoice_date)}</TableCell>
                           <TableCell data-label="Amount">{formatCurrency(invoice.total_amount)}</TableCell>
                           <TableCell data-label="Actions">
                             <div className="flex items-center justify-center space-x-2 md:justify-center">
-                              <Button variant="ghost" size="icon" onClick={() => handlePrintClick(invoice.id)} aria-label="Print Invoice">
-                                <Printer className="w-4 h-4" />
+                              <Button variant="ghost" size="icon" onClick={() => handleViewClick(invoice.id)} aria-label="View Invoice">
+                                <Eye className="w-4 h-4" />
                               </Button>
                               <Button variant="ghost" size="icon" onClick={() => handleEditClick(invoice.id)} aria-label="Edit Invoice">
                                 <Pencil className="w-4 h-4" />
@@ -257,6 +252,24 @@ const InvoicesPage: React.FC = () => {
           </CardContent>
         </Card>
         
+        <Dialog 
+          isOpen={isViewModalOpen} 
+          onClose={closeViewModal} 
+          title={`Invoice Preview: ${invoiceToView?.invoice_number || ''}`}
+          size="xl"
+        >
+          <div className="print-container">
+            {invoiceToView && <InvoiceTemplate invoice={invoiceToView} />}
+          </div>
+          <div className="no-print flex justify-end gap-4 pt-6 mt-6 border-t dark:border-gray-700">
+              <Button variant="outline" onClick={closeViewModal}>Close</Button>
+              <Button onClick={() => window.print()}>
+                  <Printer className="w-4 h-4 mr-2" />
+                  Print
+              </Button>
+          </div>
+        </Dialog>
+
         <Dialog isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedInvoice ? 'Edit Invoice' : 'Create New Invoice'}>
           <InvoiceForm
             invoice={selectedInvoice}

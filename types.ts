@@ -69,12 +69,12 @@ export type InvoiceItem = Base & {
     quantity: number;
     unit_price: number;
     tax_rate: number;
-    // Fix: Widened the type of products to include 'units' for display on the invoice template.
-    products?: Pick<Product, 'name' | 'units'>; // Optional relation
+    // Widened the type of products to include 'units' and 'hsn_code' for display on the invoice template.
+    products?: Pick<Product, 'name' | 'hsn_code' | 'units'>; // Optional relation
 };
 
 export type Invoice = Base & {
-    customer_id: string;
+    customer_id: string | null;
     invoice_number: string;
     invoice_date: string;
     total_amount: number;
