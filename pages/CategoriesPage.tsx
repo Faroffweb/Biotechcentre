@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 import { Category } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
@@ -11,6 +11,7 @@ import Dialog from '../components/ui/Dialog';
 import CategoryForm from '../components/CategoryForm';
 import { toast } from '../components/ui/Toaster';
 import Pagination from '../components/ui/Pagination';
+import Skeleton from '../components/ui/Skeleton';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -80,6 +81,34 @@ const CategoriesPage: React.FC = () => {
     setIsModalOpen(false);
     setSelectedCategory(undefined);
   };
+  
+  const renderSkeleton = () => (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Description</TableHead>
+            <TableHead className="text-center">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
+            <TableRow key={index}>
+              <TableCell><Skeleton className="h-5 w-1/3" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-full" /></TableCell>
+              <TableCell>
+                <div className="flex items-center justify-center space-x-2">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -101,9 +130,7 @@ const CategoriesPage: React.FC = () => {
           <CardTitle>Category List</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading && <p>Loading categories...</p>}
-          {error instanceof Error && <p className="text-red-500">Error: {error.message}</p>}
-          {!isLoading && !error && (
+          {isLoading ? renderSkeleton() : error instanceof Error ? <p className="text-red-500">Error: {error.message}</p> : (
             <>
               <div className="overflow-x-auto">
                 <Table className="responsive-table">

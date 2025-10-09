@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 import { Product, Unit } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
 import Pagination from '../components/ui/Pagination';
 import { Badge } from '../components/ui/Badge';
+import { Input } from '../components/ui/Input';
+import { Search } from 'lucide-react';
+import { useDebounce } from '../hooks/useDebounce';
+import Skeleton from '../components/ui/Skeleton';
+import { Link } from 'react-router-dom';
+
 
 const ITEMS_PER_PAGE = 10;
 
@@ -13,13 +19,19 @@ type StockProduct = Pick<Product, 'id' | 'name' | 'sku' | 'stock_quantity'> & {
     units: Pick<Unit, 'abbreviation'> | null;
 };
 
-const fetchStock = async (page: number): Promise<{ data: StockProduct[], count: number }> => {
+const fetchStock = async (page: number, searchTerm: string): Promise<{ data: StockProduct[], count: number }> => {
   const from = (page - 1) * ITEMS_PER_PAGE;
   const to = from + ITEMS_PER_PAGE - 1;
 
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('products')
-    .select('id, name, sku, stock_quantity, units(abbreviation)', { count: 'exact' })
+    .select('id, name, sku, stock_quantity, units(abbreviation)', { count: 'exact' });
+
+  if (searchTerm) {
+    query = query.or(`name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%`);
+  }
+
+  const { data, error, count } = await query
     .order('name', { ascending: true })
     .range(from, to);
 
@@ -29,12 +41,19 @@ const fetchStock = async (page: number): Promise<{ data: StockProduct[], count: 
 
 const StockPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const { data: stockData, isLoading, error } = useQuery({
-    queryKey: ['stock', currentPage],
-    queryFn: () => fetchStock(currentPage),
+    queryKey: ['stock', currentPage, debouncedSearchTerm],
+    queryFn: () => fetchStock(currentPage, debouncedSearchTerm),
     placeholderData: keepPreviousData,
   });
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm]);
+
 
   const products = stockData?.data ?? [];
   const totalCount = stockData?.count ?? 0;
@@ -50,6 +69,31 @@ const StockPage: React.FC = () => {
     return { text: 'Out of Stock', variant: 'destructive' };
   };
 
+  const renderSkeleton = () => (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Product Name</TableHead>
+            <TableHead>SKU</TableHead>
+            <TableHead>Current Stock</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
+            <TableRow key={index}>
+              <TableCell><Skeleton className="h-5 w-3/4" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-1/2" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-1/3" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-1/4" /></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -58,12 +102,21 @@ const StockPage: React.FC = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Current Inventory Levels</CardTitle>
+           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <CardTitle>Current Inventory Levels</CardTitle>
+               <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Input 
+                    placeholder="Search by name or SKU..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                />
+             </div>
+            </div>
         </CardHeader>
         <CardContent>
-          {isLoading && <p>Loading stock levels...</p>}
-          {error instanceof Error && <p className="text-red-500">Error: {error.message}</p>}
-          {!isLoading && !error && (
+          {isLoading ? renderSkeleton() : error instanceof Error ? <p className="text-red-500">Error: {error.message}</p> : (
             <>
               <div className="overflow-x-auto">
                 <Table className="responsive-table">
@@ -80,7 +133,11 @@ const StockPage: React.FC = () => {
                       const status = getStatus(product.stock_quantity);
                       return (
                         <TableRow key={product.id}>
-                          <TableCell data-label="Name" className="font-medium">{product.name}</TableCell>
+                          <TableCell data-label="Name" className="font-medium">
+                            <Link to={`/stock/${product.id}`} className="hover:underline text-blue-600 dark:text-blue-400">
+                                {product.name}
+                            </Link>
+                          </TableCell>
                           <TableCell data-label="SKU">{product.sku || 'N/A'}</TableCell>
                           <TableCell data-label="Stock">{product.stock_quantity} {product.units?.abbreviation || ''}</TableCell>
                           <TableCell data-label="Status">

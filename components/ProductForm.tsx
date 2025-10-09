@@ -2,7 +2,7 @@
 import React, { useEffect } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 import { Product, ProductInsert, ProductUpdate, Unit, Category } from '../types';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
@@ -115,7 +115,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
       <div>
         <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Product Name</label>
         <Input id="name" {...register('name', { required: 'Product name is required' })} />
-        {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name?.message}</p>}
+        {/* FIX: Removed optional chaining to resolve ReactNode type error */}
+        {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>}
       </div>
       
       <div>
@@ -153,7 +154,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
          <div>
           <label htmlFor="unit_price" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Unit Price (₹)</label>
           <Input id="unit_price" type="number" step="0.01" {...register('unit_price', { required: 'Unit price is required', valueAsNumber: true, min: { value: 0, message: 'Unit price must be non-negative' } })} />
-          {errors.unit_price && <p className="mt-1 text-sm text-red-500">{errors.unit_price?.message}</p>}
+          {/* FIX: Removed optional chaining to resolve ReactNode type error */}
+          {errors.unit_price && <p className="mt-1 text-sm text-red-500">{errors.unit_price.message}</p>}
         </div>
         <div>
           <label htmlFor="unit_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Unit</label>

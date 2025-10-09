@@ -1,6 +1,6 @@
 import React from 'react';
 import { Invoice, InvoiceItem, Customer, Unit } from '../types';
-import { formatDate, formatCurrency } from '../lib/utils';
+import { formatDate, formatCurrency } from '../hooks/lib/utils';
 
 type FullInvoice = Invoice & {
     customers: Pick<Customer, 'name' | 'billing_address' | 'gstin'> | null;

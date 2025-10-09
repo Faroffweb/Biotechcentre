@@ -1,14 +1,16 @@
 
+
 import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray, SubmitHandler } from 'react-hook-form';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 import { Invoice, InvoiceItem, Customer, Product, CustomerInsert } from '../types';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
 import { toast } from './ui/Toaster';
 import { Trash2 } from 'lucide-react';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency } from '../hooks/lib/utils';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/Table';
 
 // This type definition should match the one in InvoicesPage.tsx for prop compatibility
 type FullInvoice = Invoice & {
@@ -322,21 +324,21 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
 
       <div className="space-y-4">
         <h3 className="text-lg font-medium text-gray-900 dark:text-white">Items</h3>
-        <div className="overflow-x-auto border rounded-lg dark:border-gray-700">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Product</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Qty</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Price</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Total</th>
-                <th scope="col" className="relative px-4 py-3"><span className="sr-only">Remove</span></th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+        <div className="border rounded-lg dark:border-gray-700 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="px-4 py-3 text-xs">Product</TableHead>
+                <TableHead className="px-4 py-3 text-xs">Qty</TableHead>
+                <TableHead className="px-4 py-3 text-xs">Price</TableHead>
+                <TableHead className="px-4 py-3 text-xs">Total</TableHead>
+                <TableHead className="px-4 py-3 text-xs text-right"><span className="sr-only">Remove</span></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {fields.map((field, index) => (
-                <tr key={field.id}>
-                  <td className="px-4 py-2 whitespace-nowrap" style={{minWidth: '200px'}}>
+                <TableRow key={field.id} className="bg-white dark:bg-gray-800">
+                  <TableCell className="p-2 whitespace-nowrap" style={{minWidth: '200px'}}>
                      <select
                       {...register(`items.${index}.product_id`, { required: true })}
                       defaultValue={field.product_id}
@@ -347,25 +349,25 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
                       <option value="">{isLoadingProducts ? 'Loading...' : 'Select product'}</option>
                       {products?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap">
+                  </TableCell>
+                  <TableCell className="p-2 whitespace-nowrap">
                     <Input type="number" {...register(`items.${index}.quantity`, { required: true, valueAsNumber: true, min: 1 })} className="w-20" />
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap">
+                  </TableCell>
+                  <TableCell className="p-2 whitespace-nowrap">
                      <Input type="number" step="0.01" {...register(`items.${index}.unit_price`, { required: true, valueAsNumber: true, min: 0 })} className="w-28" />
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                  </TableCell>
+                  <TableCell className="p-2 whitespace-nowrap font-medium text-gray-900 dark:text-white">
                     {formatCurrency((watchedItems[index]?.quantity || 0) * (watchedItems[index]?.unit_price || 0))}
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
+                  </TableCell>
+                  <TableCell className="p-2 whitespace-nowrap text-right">
                      <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
                         <Trash2 className="w-4 h-4 text-red-500" />
                      </Button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         <Button

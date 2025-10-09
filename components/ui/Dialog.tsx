@@ -27,13 +27,13 @@ const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, children }) => 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 transition-opacity"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 animate-fade-in"
       onClick={onClose}
       aria-modal="true"
       role="dialog"
     >
       <div
-        className="relative w-full max-w-2xl m-4 bg-white rounded-lg shadow-xl dark:bg-gray-800 max-h-[90vh] flex flex-col"
+        className="relative w-full max-w-2xl m-4 bg-white rounded-lg shadow-xl dark:bg-gray-800 max-h-[90vh] flex flex-col animate-scale-in"
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside the modal
       >
         <div className="flex items-center justify-between p-4 border-b dark:border-gray-700 shrink-0">

@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 // Fix: Import `Invoice` and `Customer` types for the `FullInvoice` type definition.
 import { InvoiceWithDetails, InvoiceItem, Invoice, Customer, Unit } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
-import { PlusCircle, Pencil, Trash2, Printer } from 'lucide-react';
-import { formatDate, formatCurrency } from '../lib/utils';
+import { PlusCircle, Pencil, Trash2, Printer, Search } from 'lucide-react';
+import { formatDate, formatCurrency } from '../hooks/lib/utils';
 import Pagination from '../components/ui/Pagination';
 import Dialog from '../components/ui/Dialog';
 import InvoiceForm from '../components/InvoiceForm';
 import InvoiceTemplate from '../components/InvoiceTemplate';
 import { toast } from '../components/ui/Toaster';
+import { Input } from '../components/ui/Input';
+import { useDebounce } from '../hooks/useDebounce';
+import Skeleton from '../components/ui/Skeleton';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -23,13 +26,19 @@ type FullInvoice = Invoice & {
 };
 
 // Fetch Functions
-const fetchInvoices = async (page: number): Promise<{ data: InvoiceWithDetails[], count: number }> => {
+const fetchInvoices = async (page: number, searchTerm: string): Promise<{ data: InvoiceWithDetails[], count: number }> => {
   const from = (page - 1) * ITEMS_PER_PAGE;
   const to = from + ITEMS_PER_PAGE - 1;
 
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('invoices')
-    .select('*, customers(name)', { count: 'exact' })
+    .select('*, customers!inner(name)', { count: 'exact' });
+  
+  if (searchTerm) {
+    query = query.or(`invoice_number.ilike.%${searchTerm}%,customers.name.ilike.%${searchTerm}%`);
+  }
+    
+  const { data, error, count } = await query
     .order('invoice_date', { ascending: false })
     .range(from, to);
     
@@ -59,6 +68,8 @@ const InvoicesPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [invoiceToPrint, setInvoiceToPrint] = useState<FullInvoice | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   
   useEffect(() => {
     if (isPrinting) {
@@ -69,10 +80,14 @@ const InvoicesPage: React.FC = () => {
   }, [isPrinting]);
   
   const { data: invoicesData, isLoading, error } = useQuery({
-    queryKey: ['invoices', currentPage],
-    queryFn: () => fetchInvoices(currentPage),
+    queryKey: ['invoices', currentPage, debouncedSearchTerm],
+    queryFn: () => fetchInvoices(currentPage, debouncedSearchTerm),
     placeholderData: keepPreviousData,
   });
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm]);
 
   const invoices = invoicesData?.data ?? [];
   const totalCount = invoicesData?.count ?? 0;
@@ -125,6 +140,39 @@ const InvoicesPage: React.FC = () => {
     setSelectedInvoice(undefined);
   };
 
+  const renderSkeleton = () => (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Number</TableHead>
+            <TableHead>Customer</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Amount</TableHead>
+            <TableHead className="text-center">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
+            <TableRow key={index}>
+              <TableCell><Skeleton className="h-5 w-2/3" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-3/4" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-1/2" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-1/2" /></TableCell>
+              <TableCell>
+                <div className="flex items-center justify-center space-x-2">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
   return (
     <>
       <div className="print-only">
@@ -141,12 +189,21 @@ const InvoicesPage: React.FC = () => {
 
         <Card>
           <CardHeader>
-            <CardTitle>Invoice List</CardTitle>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <CardTitle>Invoice List</CardTitle>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Input 
+                    placeholder="Search by Invoice # or Customer..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                />
+             </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {isLoading && <p>Loading invoices...</p>}
-            {error instanceof Error && <p className="text-red-500">Error: {error.message}</p>}
-            {!isLoading && !error && (
+            {isLoading ? renderSkeleton() : error instanceof Error ? <p className="text-red-500">Error: {error.message}</p> : (
               <>
                 <div className="overflow-x-auto">
                   <Table className="responsive-table">

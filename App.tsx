@@ -13,6 +13,7 @@ import MainLayout from './components/layout/MainLayout';
 import StockPage from './pages/StockPage';
 import UnitsPage from './pages/UnitsPage';
 import CategoriesPage from './pages/CategoriesPage';
+import ProductStockReportPage from './pages/ProductStockReportPage';
 
 const App: React.FC = () => {
   return (
@@ -24,6 +25,7 @@ const App: React.FC = () => {
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="inventory" element={<ProductsPage />} />
           <Route path="stock" element={<StockPage />} />
+          <Route path="stock/:productId" element={<ProductStockReportPage />} />
           <Route path="customers" element={<CustomersPage />} />
           <Route path="purchases" element={<PurchasesPage />} />
           <Route path="reports" element={<ReportsPage />} />

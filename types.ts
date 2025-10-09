@@ -88,3 +88,14 @@ export type InvoiceWithDetails = Invoice & {
 
 export type InvoiceInsert = Omit<Invoice, 'id' | 'created_at' | 'customers' | 'invoice_items'>;
 export type InvoiceUpdate = Partial<InvoiceInsert>;
+
+// For ProductStockReportPage.tsx
+export type ProductSaleItem = InvoiceItem & {
+  invoices: {
+    invoice_number: string;
+    invoice_date: string;
+    customers: {
+      name: string;
+    } | null;
+  } | null;
+};

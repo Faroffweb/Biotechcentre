@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 import { Unit } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
@@ -12,6 +12,7 @@ import { toast } from '../components/ui/Toaster';
 import Pagination from '../components/ui/Pagination';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import Skeleton from '../components/ui/Skeleton';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -81,6 +82,34 @@ const UnitsPage: React.FC = () => {
     setIsModalOpen(false);
     setSelectedUnit(undefined);
   };
+  
+  const renderSkeleton = () => (
+     <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Abbreviation</TableHead>
+            <TableHead className="text-center">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
+            <TableRow key={index}>
+              <TableCell><Skeleton className="h-5 w-3/4" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-1/3" /></TableCell>
+              <TableCell>
+                <div className="flex items-center justify-center space-x-2">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -102,9 +131,7 @@ const UnitsPage: React.FC = () => {
           <CardTitle>Unit List</CardTitle>
         </CardHeader>
         <CardContent>
-          {isLoading && <p>Loading units...</p>}
-          {error instanceof Error && <p className="text-red-500">Error: {error.message}</p>}
-          {!isLoading && !error && (
+          {isLoading ? renderSkeleton() : error instanceof Error ? <p className="text-red-500">Error: {error.message}</p> : (
             <>
               <div className="overflow-x-auto">
                 <Table className="responsive-table">

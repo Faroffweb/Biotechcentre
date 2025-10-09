@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 import { Unit, UnitInsert, UnitUpdate } from '../types';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
@@ -70,13 +70,15 @@ const UnitForm: React.FC<UnitFormProps> = ({ unit, onSuccess, onCancel }) => {
       <div>
         <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Unit Name</label>
         <Input id="name" {...register('name', { required: 'Unit name is required' })} placeholder="e.g., Pieces" />
-        {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name?.message}</p>}
+        {/* FIX: Removed optional chaining to resolve ReactNode type error */}
+        {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>}
       </div>
       
       <div>
         <label htmlFor="abbreviation" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Abbreviation</label>
         <Input id="abbreviation" {...register('abbreviation', { required: 'Abbreviation is required' })} placeholder="e.g., PCS" />
-        {errors.abbreviation && <p className="mt-1 text-sm text-red-500">{errors.abbreviation?.message}</p>}
+        {/* FIX: Removed optional chaining to resolve ReactNode type error */}
+        {errors.abbreviation && <p className="mt-1 text-sm text-red-500">{errors.abbreviation.message}</p>}
       </div>
       
       <div className="flex justify-end space-x-4 pt-4">

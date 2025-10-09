@@ -1,26 +1,35 @@
 import React, { useState } from 'react';
 // Fix: Import `keepPreviousData` from TanStack Query v5.
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 import { Customer } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
-import { PlusCircle, Pencil, Trash2 } from 'lucide-react';
+import { PlusCircle, Pencil, Trash2, Search } from 'lucide-react';
 import Dialog from '../components/ui/Dialog';
 import CustomerForm from '../components/CustomerForm';
 import { toast } from '../components/ui/Toaster';
 import Pagination from '../components/ui/Pagination';
+import { Input } from '../components/ui/Input';
+import { useDebounce } from '../hooks/useDebounce';
+import Skeleton from '../components/ui/Skeleton';
 
 const ITEMS_PER_PAGE = 10;
 
-const fetchCustomers = async (page: number): Promise<{ data: Customer[], count: number }> => {
+const fetchCustomers = async (page: number, searchTerm: string): Promise<{ data: Customer[], count: number }> => {
   const from = (page - 1) * ITEMS_PER_PAGE;
   const to = from + ITEMS_PER_PAGE - 1;
 
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('customers')
-    .select('*', { count: 'exact' })
+    .select('*', { count: 'exact' });
+
+  if (searchTerm) {
+    query = query.ilike('name', `%${searchTerm}%`);
+  }
+
+  const { data, error, count } = await query
     .order('name', { ascending: true })
     .range(from, to);
 
@@ -38,13 +47,19 @@ const CustomersPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>(undefined);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const { data: customersData, isLoading, error } = useQuery({
-    queryKey: ['customers', currentPage],
-    queryFn: () => fetchCustomers(currentPage),
-    // Fix: Replaced `keepPreviousData: true` with `placeholderData: keepPreviousData` for TanStack Query v5 compatibility.
+    queryKey: ['customers', currentPage, debouncedSearchTerm],
+    queryFn: () => fetchCustomers(currentPage, debouncedSearchTerm),
     placeholderData: keepPreviousData,
   });
+  
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm]);
+
 
   const customers = customersData?.data ?? [];
   const totalCount = customersData?.count ?? 0;
@@ -82,6 +97,38 @@ const CustomersPage: React.FC = () => {
     setSelectedCustomer(undefined);
   };
 
+  const renderSkeleton = () => (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Phone</TableHead>
+            <TableHead>GSTIN</TableHead>
+            <TableHead className="text-center">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
+            <TableRow key={index}>
+              <TableCell><Skeleton className="h-5 w-3/4" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-full" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-2/3" /></TableCell>
+              <TableCell><Skeleton className="h-5 w-2/3" /></TableCell>
+              <TableCell>
+                <div className="flex items-center justify-center space-x-2">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -94,12 +141,21 @@ const CustomersPage: React.FC = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Customer List</CardTitle>
+           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <CardTitle>Customer List</CardTitle>
+               <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Input 
+                    placeholder="Search by customer name..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                />
+             </div>
+            </div>
         </CardHeader>
         <CardContent>
-          {isLoading && <p>Loading customers...</p>}
-          {error instanceof Error && <p className="text-red-500">Error: {error.message}</p>}
-          {!isLoading && !error && (
+          {isLoading ? renderSkeleton() : error instanceof Error ? <p className="text-red-500">Error: {error.message}</p> : (
             <>
               <div className="overflow-x-auto">
                 <Table className="responsive-table">

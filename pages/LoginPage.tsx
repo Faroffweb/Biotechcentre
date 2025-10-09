@@ -1,7 +1,8 @@
 
+
 import React, { useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';

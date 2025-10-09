@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 import { Purchase, PurchaseInsert, PurchaseUpdate, Product, ProductInsert, Unit, Category } from '../types';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
@@ -274,7 +274,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
                 </ul>
               </div>
             )}
-            {errors.product_name && <p className="mt-1 text-sm text-red-500">{errors.product_name?.message}</p>}
+            {/* FIX: Removed optional chaining to resolve ReactNode type error */}
+            {errors.product_name && <p className="mt-1 text-sm text-red-500">{errors.product_name.message}</p>}
         </div>
       ) : (
         <div className="p-4 border rounded-md space-y-4 bg-slate-50 dark:bg-slate-700/50">
@@ -282,7 +283,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
             <div>
                 <label htmlFor="new_product_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Product Name</label>
                 <Input id="new_product_name" {...register('new_product_name', { required: productMode === 'new' ? 'Product name is required.' : false })} />
-                {errors.new_product_name && <p className="mt-1 text-sm text-red-500">{errors.new_product_name?.message}</p>}
+                {/* FIX: Removed optional chaining to resolve ReactNode type error */}
+                {errors.new_product_name && <p className="mt-1 text-sm text-red-500">{errors.new_product_name.message}</p>}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -326,7 +328,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
         <div>
           <label htmlFor="purchase_date" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Purchase Date</label>
           <Input id="purchase_date" type="date" {...register('purchase_date', { required: 'Date is required' })} />
-          {errors.purchase_date && <p className="mt-1 text-sm text-red-500">{errors.purchase_date?.message}</p>}
+          {errors.purchase_date && <p className="mt-1 text-sm text-red-500">{errors.purchase_date.message}</p>}
         </div>
         <div>
           <label htmlFor="reference_invoice" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Reference Invoice</label>
@@ -337,7 +339,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
         <div>
           <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Quantity</label>
           <Input id="quantity" type="number" {...register('quantity', { required: 'Quantity is required', valueAsNumber: true, min: { value: 1, message: 'Quantity must be positive' } })} />
-          {errors.quantity && <p className="mt-1 text-sm text-red-500">{errors.quantity?.message}</p>}
+          {errors.quantity && <p className="mt-1 text-sm text-red-500">{errors.quantity.message}</p>}
         </div>
       </div>
       <div className="flex justify-end space-x-4 pt-4">

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../hooks/lib/supabase';
 import { Customer, CustomerInsert, CustomerUpdate } from '../types';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
@@ -76,7 +76,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onSuccess, onCanc
         <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
         <Input id="name" {...register('name', { required: 'Customer name is required' })} />
         {/* Fix: Use optional chaining to safely access error message and fix ReactNode type error. */}
-        {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name?.message}</p>}
+        {/* FIX: Removed optional chaining to resolve ReactNode type error */}
+        {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>}
       </div>
       
       <div>
