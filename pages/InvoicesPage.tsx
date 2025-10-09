@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '../hooks/lib/supabase';
 // Fix: Import `Invoice` and `Customer` types for the `FullInvoice` type definition.
-import { InvoiceWithDetails, InvoiceItem, Invoice, Customer, Unit } from '../types';
+import { InvoiceWithDetails, InvoiceItem, Invoice, Customer, Unit, CompanyDetails } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
@@ -57,6 +57,16 @@ const fetchInvoiceWithItems = async (invoiceId: string): Promise<FullInvoice> =>
   return data as FullInvoice;
 }
 
+const fetchCompanyDetails = async (): Promise<CompanyDetails | null> => {
+    const { data, error } = await supabase
+        .from('company_details')
+        .select('*')
+        .eq('id', 1)
+        .single();
+    if (error && error.code !== 'PGRST116') { throw new Error(error.message); }
+    return data;
+};
+
 const deleteInvoice = async (invoiceId: string) => {
   const { error } = await supabase.from('invoices').delete().eq('id', invoiceId);
   if (error) throw new Error(error.message);
@@ -76,6 +86,11 @@ const InvoicesPage: React.FC = () => {
     queryKey: ['invoices', currentPage, debouncedSearchTerm],
     queryFn: () => fetchInvoices(currentPage, debouncedSearchTerm),
     placeholderData: keepPreviousData,
+  });
+  
+  const { data: companyDetails } = useQuery({
+    queryKey: ['companyDetails'],
+    queryFn: fetchCompanyDetails,
   });
   
   useEffect(() => {
@@ -259,7 +274,7 @@ const InvoicesPage: React.FC = () => {
           size="xl"
         >
           <div className="print-container">
-            {invoiceToView && <InvoiceTemplate invoice={invoiceToView} />}
+            {invoiceToView && <InvoiceTemplate invoice={invoiceToView} companyDetails={companyDetails || null} />}
           </div>
           <div className="no-print flex justify-end gap-4 pt-6 mt-6 border-t dark:border-gray-700">
               <Button variant="outline" onClick={closeViewModal}>Close</Button>

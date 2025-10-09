@@ -1,5 +1,5 @@
 import React from 'react';
-import { Invoice, InvoiceItem, Customer, Unit } from '../types';
+import { Invoice, InvoiceItem, Customer, Unit, CompanyDetails } from '../types';
 import { formatDate, formatCurrency } from '../hooks/lib/utils';
 
 type FullInvoice = Invoice & {
@@ -9,24 +9,10 @@ type FullInvoice = Invoice & {
 
 interface InvoiceTemplateProps {
     invoice: FullInvoice;
+    companyDetails: CompanyDetails | null;
 }
 
-const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>(({ invoice }, ref) => {
-    // Placeholder details, as they are not in the database model
-    const company = {
-        name: "GST Pro Solutions",
-        address: "123 Business Rd, Financial District, Mumbai, Maharashtra 400001",
-        gstin: "27ABCDE1234F1Z5",
-        pan: "ABCDE1234F",
-    };
-    const bankDetails = {
-        accountName: "GST Pro Solutions",
-        accountNumber: "123456789012",
-        accountType: "Current",
-        bank: "State Bank of India",
-        ifsc: "SBIN0001234",
-    };
-
+const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>(({ invoice, companyDetails }, ref) => {
     // Calculations
     const taxableAmount = invoice.invoice_items.reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
     const totalCGST = invoice.invoice_items.reduce((acc, item) => acc + (item.quantity * item.unit_price * item.tax_rate / 2), 0);
@@ -71,7 +57,7 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
             <div className="page">
                 <div className="header">
                     <div className="company">
-                        <h1>{company.name}</h1>
+                        <h1>{companyDetails?.name || 'Your Company Name'}</h1>
                     </div>
                     <div className="invoice-meta">
                         <h2>Invoice</h2>
@@ -83,10 +69,10 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
                 <div className="columns">
                     <div className="panel">
                         <h3>Billed By</h3>
-                        <p><strong>Name:</strong> {company.name}<br />
-                        <strong>Address:</strong> {company.address}<br />
-                        <strong>GSTIN:</strong> {company.gstin}<br />
-                        <strong>PAN:</strong> {company.pan}</p>
+                        <p><strong>Name:</strong> {companyDetails?.name || 'N/A'}<br />
+                        <strong>Address:</strong> {companyDetails?.address || 'N/A'}<br />
+                        <strong>GSTIN:</strong> {companyDetails?.gstin || 'N/A'}<br />
+                        <strong>PAN:</strong> {companyDetails?.pan || 'N/A'}</p>
                     </div>
                     <div className="panel">
                         <h3>Billed To</h3>
@@ -146,11 +132,11 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
 
                 <div className="footer">
                     <h3>Bank Details</h3>
-                    <p><strong>Account Name:</strong> {bankDetails.accountName}<br />
-                    <strong>Account Number:</strong> {bankDetails.accountNumber}<br />
-                    <strong>Account Type:</strong> {bankDetails.accountType}<br />
-                    <strong>Bank:</strong> {bankDetails.bank}<br />
-                    <strong>IFSC:</strong> {bankDetails.ifsc}</p>
+                    <p><strong>Account Name:</strong> {companyDetails?.account_name || 'N/A'}<br />
+                    <strong>Account Number:</strong> {companyDetails?.account_number || 'N/A'}<br />
+                    <strong>Account Type:</strong> {companyDetails?.account_type || 'N/A'}<br />
+                    <strong>Bank:</strong> {companyDetails?.bank_name || 'N/A'}<br />
+                    <strong>IFSC:</strong> {companyDetails?.ifsc_code || 'N/A'}</p>
                     <p><em>Thank you for your business!</em></p>
                 </div>
 

@@ -14,6 +14,7 @@ import StockPage from './pages/StockPage';
 import UnitsPage from './pages/UnitsPage';
 import CategoriesPage from './pages/CategoriesPage';
 import ProductStockReportPage from './pages/ProductStockReportPage';
+import CompanySettingsPage from './pages/CompanySettingsPage';
 
 const App: React.FC = () => {
   return (
@@ -32,6 +33,7 @@ const App: React.FC = () => {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="settings/units" element={<UnitsPage />} />
           <Route path="settings/categories" element={<CategoriesPage />} />
+          <Route path="settings/company" element={<CompanySettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

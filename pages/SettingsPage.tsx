@@ -8,7 +8,7 @@ const settingsOptions = [
     title: 'Manage Company',
     description: 'Update your company details, GSTIN, and address.',
     icon: <Building className="w-6 h-6 text-slate-500" />,
-    href: '#', // Placeholder for future functionality
+    href: '/settings/company',
   },
   {
     title: 'Categories',

@@ -8,6 +8,24 @@
 -- 1. Tables
 -- The `user_id` column is now nullable to allow anonymous data entry.
 
+-- Company Details Table (SINGLETON)
+CREATE TABLE public.company_details (
+    id smallint NOT NULL DEFAULT 1,
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    name text,
+    address text,
+    gstin text,
+    pan text,
+    account_name text,
+    account_number text,
+    account_type text,
+    bank_name text,
+    ifsc_code text,
+    CONSTRAINT company_details_pkey PRIMARY KEY (id),
+    CONSTRAINT company_details_singleton_check CHECK (id = 1)
+);
+ALTER TABLE public.company_details ENABLE ROW LEVEL SECURITY;
+
 -- Customers Table
 CREATE TABLE public.customers (
     id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -43,6 +61,7 @@ CREATE TABLE public.categories (
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     name text NOT NULL,
     description text,
+    icon_name text,
     CONSTRAINT categories_pkey PRIMARY KEY (id),
     CONSTRAINT categories_name_key UNIQUE (name)
 );
@@ -256,10 +275,109 @@ AFTER INSERT OR UPDATE OR DELETE ON public.invoice_items
 FOR EACH ROW
 EXECUTE FUNCTION public.update_stock_on_sale();
 
+-- Function to get a combined, paginated report of sales and purchases.
+CREATE OR REPLACE FUNCTION get_combined_report(
+    p_start_date date,
+    p_end_date date,
+    p_transaction_type text, -- 'all', 'sale', 'purchase'
+    p_limit integer,
+    p_offset integer
+)
+RETURNS TABLE (
+    transaction_id uuid,
+    transaction_date date,
+    transaction_type text,
+    reference_number text,
+    product_name text,
+    quantity_change integer,
+    transaction_value numeric,
+    details text
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH combined_transactions AS (
+        -- Sales
+        SELECT
+            ii.id AS transaction_id,
+            i.invoice_date AS transaction_date,
+            'Sale' AS transaction_type,
+            i.invoice_number AS reference_number,
+            p.name AS product_name,
+            -ii.quantity AS quantity_change,
+            (ii.quantity * ii.unit_price) AS transaction_value,
+            c.name AS details
+        FROM public.invoice_items ii
+        JOIN public.invoices i ON ii.invoice_id = i.id
+        JOIN public.products p ON ii.product_id = p.id
+        LEFT JOIN public.customers c ON i.customer_id = c.id
+        WHERE (p_transaction_type = 'all' OR p_transaction_type = 'sale')
+          AND i.invoice_date >= p_start_date
+          AND i.invoice_date <= p_end_date
+
+        UNION ALL
+
+        -- Purchases
+        SELECT
+            pu.id AS transaction_id,
+            pu.purchase_date AS transaction_date,
+            'Purchase' AS transaction_type,
+            pu.reference_invoice AS reference_number,
+            p.name AS product_name,
+            pu.quantity AS quantity_change,
+            NULL AS transaction_value, -- No purchase price in schema
+            'Stock In' AS details
+        FROM public.purchases pu
+        JOIN public.products p ON pu.product_id = p.id
+        WHERE (p_transaction_type = 'all' OR p_transaction_type = 'purchase')
+          AND pu.purchase_date >= p_start_date
+          AND pu.purchase_date <= p_end_date
+    )
+    SELECT *
+    FROM combined_transactions
+    ORDER BY transaction_date DESC, product_name ASC
+    LIMIT p_limit
+    OFFSET p_offset;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to get the total count for the combined report for pagination.
+CREATE OR REPLACE FUNCTION get_combined_report_count(
+    p_start_date date,
+    p_end_date date,
+    p_transaction_type text
+)
+RETURNS integer AS $$
+DECLARE
+    total_count integer;
+BEGIN
+    SELECT count(*) INTO total_count
+    FROM (
+        SELECT i.invoice_date
+        FROM public.invoice_items ii
+        JOIN public.invoices i ON ii.invoice_id = i.id
+        WHERE (p_transaction_type = 'all' OR p_transaction_type = 'sale')
+          AND i.invoice_date >= p_start_date
+          AND i.invoice_date <= p_end_date
+
+        UNION ALL
+
+        SELECT pu.purchase_date
+        FROM public.purchases pu
+        WHERE (p_transaction_type = 'all' OR p_transaction_type = 'purchase')
+          AND pu.purchase_date >= p_start_date
+          AND pu.purchase_date <= p_end_date
+    ) AS combined_transactions;
+
+    RETURN total_count;
+END;
+$$ LANGUAGE plpgsql;
 
 -- 4. Public Access Row Level Security Policies
 -- WARNING: These policies grant full (SELECT, INSERT, UPDATE, DELETE) access to everyone, including unauthenticated visitors.
 -- This effectively makes your database completely public and editable by anyone on the internet.
+
+-- Public Full Access for Company Details
+CREATE POLICY "Enable public full access for company details" ON "public"."company_details" AS PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true);
 
 -- Public Full Access for Customers
 CREATE POLICY "Enable public full access for all customers" ON "public"."customers" AS PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true);
@@ -281,3 +399,19 @@ CREATE POLICY "Enable public full access for all invoices" ON "public"."invoices
 
 -- Public Full Access for Invoice Items
 CREATE POLICY "Enable public full access for all invoice items" ON "public"."invoice_items" AS PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- 5. Seed Data (Optional)
+-- Pre-populate categories for agriculture
+INSERT INTO public.categories (name, description, icon_name) VALUES
+('Fertilizers', 'Nutrients for plant growth', 'Leaf'),
+('Organic Fertilizers', 'Natural fertilizers derived from plant or animal matter', 'Sprout'),
+('Chemical Fertilizers (Urea, DAP, NPK)', 'Synthetic fertilizers providing specific nutrients', 'FlaskConical'),
+('Micronutrients', 'Essential elements required by plants in small quantities', 'TestTube2'),
+('Pesticides & Crop Protection', 'Chemicals to control pests, diseases, and weeds', 'Shield'),
+('Insecticides', 'Substances used to kill insects', 'Bug'),
+('Fungicides', 'Biocidal chemical compounds used to kill parasitic fungi', 'SunSnow'),
+('Herbicides', 'Substances that are toxic to plants, used to destroy unwanted vegetation', 'Ban'),
+('Bio-Pesticides', 'Pesticides derived from natural materials like animals, plants, bacteria', 'Trees')
+ON CONFLICT (name) DO UPDATE SET 
+    description = EXCLUDED.description,
+    icon_name = EXCLUDED.icon_name;

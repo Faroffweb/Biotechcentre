@@ -17,6 +17,7 @@ import { Input } from '../components/ui/Input';
 import { useDebounce } from '../hooks/useDebounce';
 import Skeleton from '../components/ui/Skeleton';
 import { Link } from 'react-router-dom';
+import DynamicIcon from '../components/ui/DynamicIcon';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -26,7 +27,7 @@ const fetchProducts = async (page: number, searchTerm: string, categoryId: strin
 
   let query = supabase
     .from('products')
-    .select('*, units(abbreviation), categories(name)', { count: 'exact' });
+    .select('*, units(abbreviation), categories(name, icon_name)', { count: 'exact' });
 
   if (searchTerm) {
     query = query.ilike('name', `%${searchTerm}%`);
@@ -210,7 +211,12 @@ const ProductsPage: React.FC = () => {
                             {product.name}
                           </Link>
                         </TableCell>
-                        <TableCell data-label="Category">{product.categories?.name || 'N/A'}</TableCell>
+                        <TableCell data-label="Category">
+                          <div className="flex items-center gap-2">
+                            <DynamicIcon name={product.categories?.icon_name} className="w-4 h-4 text-slate-500" />
+                            <span>{product.categories?.name || 'N/A'}</span>
+                          </div>
+                        </TableCell>
                         <TableCell data-label="HSN Code">{product.hsn_code || 'N/A'}</TableCell>
                         <TableCell data-label="Stock">{product.stock_quantity} {product.units?.abbreviation || ''}</TableCell>
                         <TableCell data-label="Tax">{product.tax_rate * 100}%</TableCell>

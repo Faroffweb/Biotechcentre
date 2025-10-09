@@ -195,15 +195,29 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
   };
 
   const handleProductSelect = (index: number, product: Product) => {
+    // When a product is selected, update the form fields for that item row.
+    // This ensures the correct pre-tax price and tax rate are used for all calculations.
+    
+    // Calculate the GST-inclusive rate based on the product's base price and tax rate.
     const inclusiveRate = product.unit_price * (1 + product.tax_rate);
+
+    // Get the current quantity, defaulting to 1 if not set.
+    const currentQuantity = watchedItems[index]?.quantity || 1;
+
+    // Update the entire item object in the form state.
     update(index, {
       product_id: product.id,
       product_name_display: product.name,
-      quantity: watchedItems[index].quantity || 1,
-      unit_price: product.unit_price,
-      tax_rate: product.tax_rate,
+      quantity: currentQuantity,
+      
+      // Set the core financial data from the selected product.
+      unit_price: product.unit_price, // The pre-tax unit price.
+      tax_rate: product.tax_rate,     // The tax rate as a decimal (e.g., 0.18 for 18%).
+      
+      // Update the user-facing 'Rate (GST Incl.)' field.
       inclusive_rate_display: parseFloat(inclusiveRate.toFixed(2)),
     });
+    
     setActiveSuggestionBox(null);
   };
   
@@ -372,12 +386,25 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
         <Button type="button" variant="outline" onClick={() => append({ product_id: '', product_name_display: '', quantity: 1, unit_price: 0, tax_rate: 0, inclusive_rate_display: 0 })}>Add Item</Button>
       </div>
 
-      <div className="flex justify-end pt-4">
+      {/* Invoice Totals Summary */}
+      <div className="flex justify-end pt-6 mt-6 border-t dark:border-gray-700">
         <div className="w-full max-w-sm space-y-2">
-            <div className="flex justify-between text-sm"><span className="text-gray-600 dark:text-gray-400">Subtotal:</span><span className="font-medium">{formatCurrency(totals.subtotal)}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-gray-600 dark:text-gray-400">CGST:</span><span className="font-medium">{formatCurrency(totals.tax / 2)}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-gray-600 dark:text-gray-400">SGST:</span><span className="font-medium">{formatCurrency(totals.tax / 2)}</span></div>
-            <div className="flex justify-between text-lg font-bold border-t pt-2 mt-2 dark:border-gray-600"><span>Grand Total:</span><span>{formatCurrency(totals.grandTotal)}</span></div>
+            <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">Subtotal:</span>
+                <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(totals.subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">CGST:</span>
+                <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(totals.tax / 2)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">SGST:</span>
+                <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(totals.tax / 2)}</span>
+            </div>
+            <div className="flex justify-between text-lg font-bold pt-2 mt-2 border-t dark:border-gray-600">
+                <span className="text-gray-900 dark:text-white">Grand Total:</span>
+                <span className="text-gray-900 dark:text-white">{formatCurrency(totals.grandTotal)}</span>
+            </div>
         </div>
       </div>
       

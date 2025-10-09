@@ -4,6 +4,23 @@ type Base = {
   created_at: string;
 };
 
+// Company Details Type
+export type CompanyDetails = {
+  id: number;
+  created_at: string;
+  name: string | null;
+  address: string | null;
+  gstin: string | null;
+  pan: string | null;
+  account_name: string | null;
+  account_number: string | null;
+  account_type: string | null;
+  bank_name: string | null;
+  ifsc_code: string | null;
+};
+export type CompanyDetailsUpdate = Partial<Omit<CompanyDetails, 'id' | 'created_at'>>;
+
+
 // Unit Type
 export type Unit = Base & {
   name: string;
@@ -16,6 +33,7 @@ export type UnitUpdate = Partial<UnitInsert>;
 export type Category = Base & {
   name: string;
   description: string | null;
+  icon_name: string | null;
 };
 export type CategoryInsert = Omit<Category, 'id' | 'created_at'>;
 export type CategoryUpdate = Partial<CategoryInsert>;
@@ -32,7 +50,7 @@ export type Product = Base & {
   unit_id: string | null;
   category_id: string | null;
   units?: Pick<Unit, 'abbreviation'> | null;
-  categories?: Pick<Category, 'name'> | null;
+  categories?: Pick<Category, 'name' | 'icon_name'> | null;
 };
 export type ProductInsert = Omit<Product, 'id' | 'created_at' | 'units' | 'categories'>;
 export type ProductUpdate = Partial<ProductInsert>;

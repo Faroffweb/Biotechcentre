@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS public.products CASCADE;
 DROP TABLE IF EXISTS public.units CASCADE;
 DROP TABLE IF EXISTS public.categories CASCADE;
 DROP TABLE IF EXISTS public.customers CASCADE;
+DROP TABLE IF EXISTS public.company_details CASCADE;
 
 -- 2. Drop Functions
 -- These are the trigger functions used for automated logic.
@@ -23,5 +24,8 @@ DROP FUNCTION IF EXISTS public.set_invoice_item_user_id();
 DROP FUNCTION IF EXISTS public.update_invoice_totals();
 DROP FUNCTION IF EXISTS public.update_stock_on_purchase();
 DROP FUNCTION IF EXISTS public.update_stock_on_sale();
+DROP FUNCTION IF EXISTS public.get_combined_report(date, date, text, integer, integer);
+DROP FUNCTION IF EXISTS public.get_combined_report_count(date, date, text);
+
 
 -- All GST Management System database objects have been removed.

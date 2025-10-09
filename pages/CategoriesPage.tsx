@@ -12,6 +12,7 @@ import CategoryForm from '../components/CategoryForm';
 import { toast } from '../components/ui/Toaster';
 import Pagination from '../components/ui/Pagination';
 import Skeleton from '../components/ui/Skeleton';
+import DynamicIcon from '../components/ui/DynamicIcon';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -95,7 +96,12 @@ const CategoriesPage: React.FC = () => {
         <TableBody>
           {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
             <TableRow key={index}>
-              <TableCell><Skeleton className="h-5 w-1/3" /></TableCell>
+              <TableCell>
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-5 w-5 rounded-sm" />
+                  <Skeleton className="h-5 w-1/3" />
+                </div>
+              </TableCell>
               <TableCell><Skeleton className="h-5 w-full" /></TableCell>
               <TableCell>
                 <div className="flex items-center justify-center space-x-2">
@@ -144,7 +150,12 @@ const CategoriesPage: React.FC = () => {
                   <TableBody>
                     {categories.length > 0 ? categories.map((category) => (
                       <TableRow key={category.id}>
-                        <TableCell data-label="Name" className="font-medium">{category.name}</TableCell>
+                        <TableCell data-label="Name" className="font-medium">
+                          <div className="flex items-center gap-3">
+                            <DynamicIcon name={category.icon_name} className="w-5 h-5 text-slate-500" />
+                            <span>{category.name}</span>
+                          </div>
+                        </TableCell>
                         <TableCell data-label="Description">{category.description || 'N/A'}</TableCell>
                         <TableCell data-label="Actions">
                           <div className="flex items-center justify-center space-x-2 md:justify-center">

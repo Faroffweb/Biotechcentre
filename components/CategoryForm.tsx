@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../hooks/lib/supabase';
@@ -6,6 +6,8 @@ import { Category, CategoryInsert, CategoryUpdate } from '../types';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
 import { toast } from './ui/Toaster';
+import DynamicIcon from './ui/DynamicIcon';
+import IconPicker from './ui/IconPicker';
 
 interface CategoryFormProps {
   category?: Category;
@@ -29,22 +31,30 @@ const upsertCategory = async ({ categoryData, id }: { categoryData: CategoryInse
 
 const CategoryForm: React.FC<CategoryFormProps> = ({ category, onSuccess, onCancel }) => {
   const queryClient = useQueryClient();
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  
   const {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CategoryFormData>({
     defaultValues: {
       name: '',
       description: '',
+      icon_name: null,
     },
   });
+
+  const iconName = watch('icon_name');
 
   useEffect(() => {
     reset(category || {
       name: '',
       description: '',
+      icon_name: null,
     });
   }, [category, reset]);
 
@@ -67,11 +77,37 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ category, onSuccess, onCanc
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category Name</label>
-        <Input id="name" {...register('name', { required: 'Category name is required' })} placeholder="e.g., Electronics" />
-        {/* FIX: Removed optional chaining to resolve ReactNode type error */}
-        {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+        <div>
+          <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category Name</label>
+          <Input id="name" {...register('name', { required: 'Category name is required' })} placeholder="e.g., Electronics" />
+          {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Icon</label>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsPickerOpen(!isPickerOpen)}
+              className="flex items-center gap-2 w-full h-10 px-4 py-2 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50"
+            >
+              <DynamicIcon name={iconName} className="w-5 h-5" />
+              <span className="truncate">{iconName || 'Select an Icon'}</span>
+            </button>
+            {isPickerOpen && (
+              <div className="absolute z-10 w-full">
+                <IconPicker 
+                  onSelect={(name) => {
+                    setValue('icon_name', name, { shouldDirty: true });
+                    setIsPickerOpen(false);
+                  }}
+                  currentIcon={iconName}
+                />
+              </div>
+            )}
+          </div>
+          <input type="hidden" {...register('icon_name')} />
+        </div>
       </div>
       
       <div>
