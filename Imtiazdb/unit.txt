@@ -1,0 +1,24 @@
+-- Schema for Units Table
+-- Allows defining measurement units for products.
+
+CREATE TABLE public.units (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid, -- Nullable for public access
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    name text NOT NULL,
+    abbreviation text NOT NULL,
+    CONSTRAINT units_pkey PRIMARY KEY (id),
+    CONSTRAINT units_abbreviation_key UNIQUE (abbreviation), -- Abbreviations must be unique
+    CONSTRAINT units_name_key UNIQUE (name) -- Names must be unique
+);
+
+-- Enable Row Level Security
+ALTER TABLE public.units ENABLE ROW LEVEL SECURITY;
+
+-- Grant full public access
+-- WARNING: Allows any visitor to create, read, update, and delete units.
+CREATE POLICY "Enable public full access for all units" ON "public"."units"
+AS PERMISSIVE FOR ALL
+TO public
+USING (true)
+WITH CHECK (true);

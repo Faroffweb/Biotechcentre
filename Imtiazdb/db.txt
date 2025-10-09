@@ -1,0 +1,249 @@
+-- Full Supabase Schema for a PUBLIC GST Management System
+-- WARNING: This schema is designed for a fully public, anonymous-write database.
+-- It removes user-specific data ownership, allowing ANYONE to create, read, update, and delete data.
+-- Do NOT use this schema for sensitive or private data.
+--
+-- To use, copy and paste the entire script into the Supabase SQL Editor and run it.
+
+-- 1. Tables
+-- The `user_id` column is now nullable to allow anonymous data entry.
+
+-- Customers Table
+CREATE TABLE public.customers (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid, -- Made nullable for public access
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    name text NOT NULL,
+    email text,
+    phone text,
+    gstin text,
+    billing_address text,
+    is_guest boolean NOT NULL DEFAULT false,
+    CONSTRAINT customers_pkey PRIMARY KEY (id)
+);
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+
+-- Units Table
+CREATE TABLE public.units (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid, -- Nullable for public access
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    name text NOT NULL,
+    abbreviation text NOT NULL,
+    CONSTRAINT units_pkey PRIMARY KEY (id),
+    CONSTRAINT units_abbreviation_key UNIQUE (abbreviation),
+    CONSTRAINT units_name_key UNIQUE (name)
+);
+ALTER TABLE public.units ENABLE ROW LEVEL SECURITY;
+
+-- Categories Table (NEW)
+CREATE TABLE public.categories (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid, -- Nullable for public access
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    name text NOT NULL,
+    description text,
+    CONSTRAINT categories_pkey PRIMARY KEY (id),
+    CONSTRAINT categories_name_key UNIQUE (name)
+);
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+
+-- Products Table
+CREATE TABLE public.products (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid, -- Made nullable for public access
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    name text NOT NULL,
+    description text,
+    sku text,
+    hsn_code text,
+    stock_quantity integer NOT NULL DEFAULT 0,
+    unit_price numeric NOT NULL,
+    tax_rate numeric NOT NULL,
+    unit_id uuid,
+    category_id uuid, -- Added foreign key for categories
+    CONSTRAINT products_pkey PRIMARY KEY (id),
+    CONSTRAINT products_stock_quantity_check CHECK (stock_quantity >= 0),
+    CONSTRAINT products_unit_price_check CHECK (unit_price >= 0),
+    CONSTRAINT products_tax_rate_check CHECK (tax_rate >= 0 AND tax_rate <= 1),
+    CONSTRAINT products_sku_key UNIQUE (sku), -- SKU should be unique across all products
+    CONSTRAINT products_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.units(id) ON DELETE SET NULL,
+    CONSTRAINT products_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id) ON DELETE SET NULL
+);
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+
+-- Purchases Table
+CREATE TABLE public.purchases (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid, -- Made nullable for public access
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    product_id uuid NOT NULL,
+    purchase_date date NOT NULL,
+    reference_invoice text,
+    quantity integer NOT NULL,
+    CONSTRAINT purchases_pkey PRIMARY KEY (id),
+    CONSTRAINT purchases_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE RESTRICT,
+    CONSTRAINT purchases_quantity_check CHECK (quantity > 0)
+);
+ALTER TABLE public.purchases ENABLE ROW LEVEL SECURITY;
+
+-- Invoices Table
+CREATE TABLE public.invoices (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid, -- Made nullable for public access
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    customer_id uuid NOT NULL,
+    invoice_number text NOT NULL,
+    invoice_date date NOT NULL,
+    total_amount numeric NOT NULL DEFAULT 0,
+    CONSTRAINT invoices_pkey PRIMARY KEY (id),
+    CONSTRAINT invoices_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE RESTRICT,
+    CONSTRAINT invoices_invoice_number_key UNIQUE (invoice_number) -- Invoice number should be unique across all invoices
+);
+ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
+
+-- Invoice Items Table
+CREATE TABLE public.invoice_items (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid, -- Made nullable, populated by trigger
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    invoice_id uuid NOT NULL,
+    product_id uuid NOT NULL,
+    quantity integer NOT NULL,
+    unit_price numeric NOT NULL,
+    tax_rate numeric NOT NULL,
+    CONSTRAINT invoice_items_pkey PRIMARY KEY (id),
+    CONSTRAINT invoice_items_invoice_id_fkey FOREIGN KEY (invoice_id) REFERENCES public.invoices(id) ON DELETE CASCADE,
+    CONSTRAINT invoice_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE RESTRICT,
+    CONSTRAINT invoice_items_quantity_check CHECK (quantity > 0),
+    CONSTRAINT invoice_items_unit_price_check CHECK (unit_price >= 0),
+    CONSTRAINT invoice_items_tax_rate_check CHECK (tax_rate >= 0 AND tax_rate <= 1)
+);
+ALTER TABLE public.invoice_items ENABLE ROW LEVEL SECURITY;
+
+
+-- 3. Functions and Triggers
+-- These automate backend logic like calculations and data synchronization.
+
+-- Function to set user_id on invoice_items from the parent invoice (will propagate NULL if parent is anonymous).
+CREATE OR REPLACE FUNCTION public.set_invoice_item_user_id()
+RETURNS TRIGGER AS $$
+BEGIN
+    SELECT user_id INTO NEW.user_id
+    FROM public.invoices
+    WHERE id = NEW.invoice_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Trigger for invoice_items user_id
+CREATE TRIGGER before_invoice_item_insert
+BEFORE INSERT ON public.invoice_items
+FOR EACH ROW
+EXECUTE FUNCTION public.set_invoice_item_user_id();
+
+-- Function to automatically calculate and update the total_amount on an invoice
+CREATE OR REPLACE FUNCTION public.update_invoice_totals()
+RETURNS TRIGGER AS $$
+DECLARE
+    invoice_id_to_update uuid;
+BEGIN
+    IF (TG_OP = 'DELETE') THEN
+        invoice_id_to_update := OLD.invoice_id;
+    ELSE
+        invoice_id_to_update := NEW.invoice_id;
+    END IF;
+
+    UPDATE public.invoices
+    SET total_amount = (
+        SELECT COALESCE(SUM(quantity * unit_price * (1 + tax_rate)), 0)
+        FROM public.invoice_items
+        WHERE invoice_id = invoice_id_to_update
+    )
+    WHERE id = invoice_id_to_update;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Trigger for invoice totals
+CREATE TRIGGER on_invoice_item_change
+AFTER INSERT OR UPDATE OR DELETE ON public.invoice_items
+FOR EACH ROW
+EXECUTE FUNCTION public.update_invoice_totals();
+
+-- Function to automatically update product stock levels when a purchase is recorded.
+CREATE OR REPLACE FUNCTION public.update_stock_on_purchase()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (TG_OP = 'INSERT') THEN
+        UPDATE public.products
+        SET stock_quantity = stock_quantity + NEW.quantity
+        WHERE id = NEW.product_id;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        UPDATE public.products
+        SET stock_quantity = stock_quantity - OLD.quantity + NEW.quantity
+        WHERE id = NEW.product_id;
+    ELSIF (TG_OP = 'DELETE') THEN
+        UPDATE public.products
+        SET stock_quantity = stock_quantity - OLD.quantity
+        WHERE id = OLD.product_id;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Trigger for stock from purchases
+CREATE TRIGGER on_purchase_change
+AFTER INSERT OR UPDATE OR DELETE ON public.purchases
+FOR EACH ROW
+EXECUTE FUNCTION public.update_stock_on_purchase();
+
+
+-- Function to automatically update product stock levels when an invoice item (sale) is recorded.
+CREATE OR REPLACE FUNCTION public.update_stock_on_sale()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (TG_OP = 'INSERT') THEN
+        UPDATE public.products
+        SET stock_quantity = stock_quantity - NEW.quantity
+        WHERE id = NEW.product_id;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        UPDATE public.products
+        SET stock_quantity = stock_quantity + OLD.quantity - NEW.quantity
+        WHERE id = NEW.product_id;
+    ELSIF (TG_OP = 'DELETE') THEN
+        UPDATE public.products
+        SET stock_quantity = stock_quantity + OLD.quantity
+        WHERE id = OLD.product_id;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Trigger for stock from sales
+CREATE TRIGGER on_invoice_item_sale
+AFTER INSERT OR UPDATE OR DELETE ON public.invoice_items
+FOR EACH ROW
+EXECUTE FUNCTION public.update_stock_on_sale();
+
+
+-- 4. Public Access Row Level Security Policies
+-- WARNING: These policies grant full (SELECT, INSERT, UPDATE, DELETE) access to everyone, including unauthenticated visitors.
+-- This effectively makes your database completely public and editable by anyone on the internet.
+
+-- Public Full Access for Customers
+CREATE POLICY "Enable public full access for all customers" ON "public"."customers" AS PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Public Full Access for Units
+CREATE POLICY "Enable public full access for all units" ON "public"."units" AS PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Public Full Access for Categories
+CREATE POLICY "Enable public full access for all categories" ON "public"."categories" AS PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Public Full Access for Products
+CREATE POLICY "Enable public full access for all products" ON "public"."products" AS PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Public Full Access for Purchases
+CREATE POLICY "Enable public full access for all purchases" ON "public"."purchases" AS PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Public Full Access for Invoices
+CREATE POLICY "Enable public full access for all invoices" ON "public"."invoices" AS PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true);
+
+-- Public Full Access for Invoice Items
+CREATE POLICY "Enable public full access for all invoice items" ON "public"."invoice_items" AS PERMISSIVE FOR ALL TO public USING (true) WITH CHECK (true);

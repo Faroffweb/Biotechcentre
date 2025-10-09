@@ -1,0 +1,27 @@
+-- This script will completely remove all tables, types, and functions
+-- created by the GST Management System schema.
+-- WARNING: This is a destructive action and will result in the permanent loss of all data.
+-- Run this script with caution.
+
+-- 1. Drop Tables
+-- The tables are dropped in an order that respects foreign key constraints.
+-- The CASCADE option is used to automatically remove any dependent objects like constraints and triggers.
+
+DROP TABLE IF EXISTS public.invoice_items CASCADE;
+DROP TABLE IF EXISTS public.purchases CASCADE;
+DROP TABLE IF EXISTS public.invoices CASCADE;
+DROP TABLE IF EXISTS public.products CASCADE;
+DROP TABLE IF EXISTS public.units CASCADE;
+DROP TABLE IF EXISTS public.categories CASCADE;
+DROP TABLE IF EXISTS public.customers CASCADE;
+
+-- 2. Drop Functions
+-- These are the trigger functions used for automated logic.
+-- They are dropped after the tables that use them.
+
+DROP FUNCTION IF EXISTS public.set_invoice_item_user_id();
+DROP FUNCTION IF EXISTS public.update_invoice_totals();
+DROP FUNCTION IF EXISTS public.update_stock_on_purchase();
+DROP FUNCTION IF EXISTS public.update_stock_on_sale();
+
+-- All GST Management System database objects have been removed.

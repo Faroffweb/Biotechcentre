@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GST Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+          },
+        },
+      }
+    </script>
+  <style>
+    @media (max-width: 767px) {
+      .responsive-table thead {
+        display: none;
+      }
+      .responsive-table tr {
+        display: block;
+        border-bottom: 2px solid #e5e7eb; /* border-gray-200 */
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+      }
+      .responsive-table td {
+        display: block;
+        text-align: right;
+        position: relative;
+        padding-left: 50%;
+        border-bottom: none;
+      }
+      .responsive-table td:last-child {
+        padding-bottom: 0;
+      }
+      .responsive-table td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 0.5rem;
+        width: 45%;
+        padding-right: 0.5rem;
+        font-weight: 500;
+        text-align: left;
+        white-space: nowrap;
+      }
+      .responsive-table td .flex {
+        justify-content: flex-end;
+      }
+    }
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      .print-only, .print-only * {
+        visibility: visible;
+      }
+      .print-only {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+      .no-print {
+        display: none;
+      }
+    }
+  </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.4",
+    "recharts": "https://aistudiocdn.com/recharts@^3.2.1",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.74.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.545.0",
+    "@tanstack/react-query": "https://aistudiocdn.com/@tanstack/react-query@^5.90.2",
+    "react-hook-form": "https://aistudiocdn.com/react-hook-form@^7.64.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-slate-50 dark:bg-gray-950">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

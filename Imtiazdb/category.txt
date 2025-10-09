@@ -1,0 +1,23 @@
+-- Schema for Categories Table
+-- Allows defining categories for products.
+
+CREATE TABLE public.categories (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    user_id uuid, -- Nullable for public access
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    name text NOT NULL,
+    description text,
+    CONSTRAINT categories_pkey PRIMARY KEY (id),
+    CONSTRAINT categories_name_key UNIQUE (name) -- Category names must be unique
+);
+
+-- Enable Row Level Security
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+
+-- Grant full public access
+-- WARNING: Allows any visitor to create, read, update, and delete categories.
+CREATE POLICY "Enable public full access for all categories" ON "public"."categories"
+AS PERMISSIVE FOR ALL
+TO public
+USING (true)
+WITH CHECK (true);
