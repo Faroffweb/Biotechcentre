@@ -63,7 +63,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
     defaultValues: {
       name: '',
       hsn_code: '',
-      sku: '',
       stock_quantity: 0,
       tax_rate: 0,
       unit_id: null,
@@ -80,7 +79,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
         reset({
             name: product.name,
             hsn_code: product.hsn_code,
-            sku: product.sku,
             stock_quantity: product.stock_quantity,
             tax_rate: product.tax_rate * 100,
             unit_id: product.unit_id || null,
@@ -91,7 +89,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
         reset({
             name: '',
             hsn_code: '',
-            sku: '',
             stock_quantity: 0,
             tax_rate: 0,
             unit_id: null,
@@ -168,7 +165,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
     
     const commonData = {
       ...productData,
-      sku: data.sku?.trim() || null,
       stock_quantity: Number(data.stock_quantity),
       tax_rate: Number(data.tax_rate) / 100, // Store tax rate as a decimal
       unit_id: data.unit_id || null,
@@ -231,13 +227,6 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
           <Input id="hsn_code" {...register('hsn_code')} />
         </div>
         <div>
-          <label htmlFor="sku" className="block text-sm font-medium text-gray-700 dark:text-gray-300">SKU</label>
-          <Input id="sku" {...register('sku', {
-            validate: value => (value && value.trim().length === 0) ? 'SKU cannot be only whitespace.' : true,
-          })} />
-          {errors.sku && <p className="mt-1 text-sm text-red-500">{errors.sku.message}</p>}
-        </div>
-        <div>
           <label htmlFor="unit_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Unit</label>
           <select
             id="unit_id"
@@ -254,7 +243,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
           <Input id="stock_quantity" type="number" {...register('stock_quantity', { required: true, valueAsNumber: true, min: 0 })} />
           {errors.stock_quantity && <p className="mt-1 text-sm text-red-500">Stock cannot be negative.</p>}
         </div>
-        <div className="md:col-span-2">
+        <div>
           <label htmlFor="tax_rate" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tax Rate (%)</label>
           <Input id="tax_rate" type="number" step="0.01" {...register('tax_rate', { required: true, valueAsNumber: true, min: 0, max: 100 })} />
           {errors.tax_rate && <p className="mt-1 text-sm text-red-500">Tax rate must be between 0 and 100.</p>}

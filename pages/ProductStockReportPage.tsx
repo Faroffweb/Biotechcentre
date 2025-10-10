@@ -17,7 +17,7 @@ import autoTable from 'jspdf-autotable';
 
 const ITEMS_PER_PAGE = 20;
 
-type ProductDetails = Pick<Product, 'name' | 'sku' | 'stock_quantity'> & {
+type ProductDetails = Pick<Product, 'name' | 'stock_quantity'> & {
     units: Pick<Unit, 'abbreviation'> | null;
 };
 
@@ -36,7 +36,7 @@ type StockMovement = {
 const fetchProductDetails = async (productId: string): Promise<ProductDetails> => {
     const { data, error } = await supabase
         .from('products')
-        .select('name, sku, stock_quantity, units(abbreviation)')
+        .select('name, stock_quantity, units(abbreviation)')
         .eq('id', productId)
         .single();
     if (error) throw new Error(error.message);
@@ -233,13 +233,10 @@ const ProductStockReportPage: React.FC = () => {
             const detailsY = 42;
             doc.setFontSize(10);
             doc.setTextColor(0);
-            doc.setFont('helvetica', 'bold'); doc.text('Product SKU:', 14, detailsY);
-            doc.setFont('helvetica', 'normal'); doc.text(product.sku || 'N/A', 40, detailsY);
-
-            doc.setFont('helvetica', 'bold'); doc.text('Current Stock:', 14, detailsY + 5);
-            doc.setFont('helvetica', 'normal'); doc.text(`${product.stock_quantity} ${product.units?.abbreviation || ''}`, 40, detailsY + 5);
+            doc.setFont('helvetica', 'bold'); doc.text('Current Stock:', 14, detailsY);
+            doc.setFont('helvetica', 'normal'); doc.text(`${product.stock_quantity} ${product.units?.abbreviation || ''}`, 40, detailsY);
             
-            const tableStartY = detailsY + 12;
+            const tableStartY = detailsY + 8;
 
             const tableData = stockMovements.map(item => [
                 formatDate(item.date), item.invoice, item.openingStock.toString(),
@@ -263,13 +260,17 @@ const ProductStockReportPage: React.FC = () => {
                         data.cell.styles.textColor = [220, 53, 69]; data.cell.styles.fontStyle = 'bold';
                     }
                 },
-                didDrawPage: (data) => {
-                    const pageCount = doc.internal.getNumberOfPages();
-                    doc.setFontSize(8).setTextColor(150);
-                    doc.text(`Page ${data.pageNumber} of ${pageCount}`, doc.internal.pageSize.width - 20, doc.internal.pageSize.height - 10, { align: 'center' });
-                }
             });
             
+            // FIX: The original didDrawPage hook had a logic error for displaying total page count ("Page X of Y") and a type error.
+            // The correct way is to add page numbers after the table has been rendered completely.
+            const pageCount = doc.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8).setTextColor(150);
+                doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.width / 2, doc.internal.pageSize.height - 10, { align: 'center' });
+            }
+
             doc.save(`Stock-Report-${product.name.replace(/\s/g, '_')}.pdf`);
             toast('Report exported successfully!');
         } catch (err) {
@@ -312,7 +313,6 @@ const ProductStockReportPage: React.FC = () => {
                         <CardDescription>Current snapshot of the product inventory.</CardDescription>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mt-4 md:mt-0">
-                        <div><p className="text-gray-500 dark:text-gray-400">SKU</p><p className="font-semibold text-base">{product?.sku || 'N/A'}</p></div>
                         <div><p className="text-gray-500 dark:text-gray-400">Current Stock</p><p className="font-semibold text-lg">{product?.stock_quantity} {product?.units?.abbreviation}</p></div>
                     </div>
                 </CardHeader>

@@ -18,7 +18,6 @@ type PurchaseFormData = Omit<Purchase, 'id' | 'created_at' | 'product_id'> & {
     product_name: string;
     new_product_name?: string;
     new_product_hsn_code?: string;
-    new_product_sku?: string;
     new_product_tax_rate?: number;
     new_product_unit_id?: string | null;
     new_product_unit_name?: string;
@@ -83,7 +82,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
       product_name: '',
       new_product_name: '',
       new_product_hsn_code: '',
-      new_product_sku: '',
       new_product_tax_rate: 0,
       new_product_unit_id: null,
       new_product_unit_name: '',
@@ -250,7 +248,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
             name: data.new_product_name,
             description: null,
             hsn_code: data.new_product_hsn_code || null,
-            sku: data.new_product_sku?.trim() || null,
             tax_rate: (data.new_product_tax_rate || 0) / 100,
             stock_quantity: 0,
             unit_price: 0, // Selling price defaults to 0 as requested
@@ -325,13 +322,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
                   <Input id="new_product_hsn_code" {...register('new_product_hsn_code')} />
                 </div>
                 <div>
-                  <label htmlFor="new_product_sku" className="block text-sm font-medium text-gray-700 dark:text-gray-300">SKU</label>
-                  <Input id="new_product_sku" {...register('new_product_sku', {
-                    validate: value => (value && value.trim().length === 0) ? 'SKU cannot be only whitespace.' : true,
-                  })} />
-                  {errors.new_product_sku && <p className="mt-1 text-sm text-red-500">{errors.new_product_sku.message}</p>}
-                </div>
-                <div>
                   <label htmlFor="new_product_tax_rate" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tax Rate (%)</label>
                   <Input id="new_product_tax_rate" type="number" step="0.01" {...register('new_product_tax_rate', { valueAsNumber: true, min: 0, max: 100 })} />
                 </div>
@@ -348,7 +338,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
                         </div>
                     )}
                 </div>
-                <div className="relative md:col-span-2" ref={categorySuggestionsRef}>
+                <div className="relative" ref={categorySuggestionsRef}>
                     <label htmlFor="new_product_category_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
                     <Input id="new_product_category_name" {...register('new_product_category_name')} disabled={isLoadingCategories} placeholder={isLoadingCategories ? 'Loading...' : 'Type to search or create'} onFocus={() => setShowCategorySuggestions(true)} autoComplete="off" />
                     {showCategorySuggestions && categoryNameValue && (

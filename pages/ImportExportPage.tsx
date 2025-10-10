@@ -113,7 +113,7 @@ const ImportExportPage: React.FC = () => {
                     case 'products':
                         requiredHeaders = ['name', 'unit_price', 'tax_rate', 'stock_quantity'];
                         dataToInsert = rows.map(row => ({
-                            name: row.name, description: row.description || null, sku: row.sku || null, hsn_code: row.hsn_code || null,
+                            name: row.name, description: row.description || null, hsn_code: row.hsn_code || null,
                             stock_quantity: parseInt(row.stock_quantity, 10) || 0,
                             unit_price: parseFloat(row.unit_price) || 0,
                             tax_rate: parseFloat(row.tax_rate) || 0,
@@ -160,7 +160,7 @@ const ImportExportPage: React.FC = () => {
     const downloadTemplate = (type: 'products' | 'customers' | 'purchases') => {
         let headers = '';
         switch(type) {
-            case 'products': headers = 'name,description,sku,hsn_code,stock_quantity,unit_price,tax_rate,unit_id,category_id'; break;
+            case 'products': headers = 'name,description,hsn_code,stock_quantity,unit_price,tax_rate,unit_id,category_id'; break;
             case 'customers': headers = 'name,email,phone,gstin,billing_address,is_guest'; break;
             case 'purchases': headers = 'product_id,purchase_date,reference_invoice,quantity'; break;
         }

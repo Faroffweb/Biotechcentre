@@ -82,7 +82,6 @@ CREATE TABLE public.products (
     created_at timestamp with time zone NOT NULL DEFAULT now(),
     name text NOT NULL,
     description text,
-    sku text,
     hsn_code text,
     stock_quantity integer NOT NULL DEFAULT 0,
     unit_price numeric NOT NULL,
@@ -93,8 +92,7 @@ CREATE TABLE public.products (
     CONSTRAINT products_stock_quantity_check CHECK (stock_quantity >= 0),
     CONSTRAINT products_unit_price_check CHECK (unit_price >= 0),
     CONSTRAINT products_tax_rate_check CHECK (tax_rate >= 0 AND tax_rate <= 1),
-    CONSTRAINT products_sku_key UNIQUE (sku), -- SKU should be unique across all products
-    CONSTRAINT products_sku_not_empty_check CHECK (sku IS NULL OR trim(sku) <> ''),
+    CONSTRAINT products_name_key UNIQUE (name),
     CONSTRAINT products_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.units(id) ON DELETE SET NULL,
     CONSTRAINT products_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id) ON DELETE SET NULL
 );
@@ -470,24 +468,24 @@ BEGIN
 
     -- Insert Products and capture IDs (stock_quantity starts at 0, will be updated by purchases)
     IF kg_unit_id IS NOT NULL AND chem_fertilizer_cat_id IS NOT NULL THEN
-        INSERT INTO public.products (name, hsn_code, sku, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('Urea (46% N)', '31021000', 'FER-UREA-50KG', 350.00, 0.05, kg_unit_id, chem_fertilizer_cat_id, 0) ON CONFLICT (sku) DO NOTHING;
+        INSERT INTO public.products (name, hsn_code, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('Urea (46% N)', '31021000', 350.00, 0.05, kg_unit_id, chem_fertilizer_cat_id, 0) ON CONFLICT (name) DO NOTHING;
     END IF;
-    SELECT id INTO urea_prod_id FROM public.products WHERE sku = 'FER-UREA-50KG';
+    SELECT id INTO urea_prod_id FROM public.products WHERE name = 'Urea (46% N)';
     
     IF kg_unit_id IS NOT NULL AND chem_fertilizer_cat_id IS NOT NULL THEN
-        INSERT INTO public.products (name, hsn_code, sku, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('DAP (18-46-0)', '31053000', 'FER-DAP-50KG', 1200.00, 0.05, kg_unit_id, chem_fertilizer_cat_id, 0) ON CONFLICT (sku) DO NOTHING;
+        INSERT INTO public.products (name, hsn_code, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('DAP (18-46-0)', '31053000', 1200.00, 0.05, kg_unit_id, chem_fertilizer_cat_id, 0) ON CONFLICT (name) DO NOTHING;
     END IF;
-    SELECT id INTO dap_prod_id FROM public.products WHERE sku = 'FER-DAP-50KG';
+    SELECT id INTO dap_prod_id FROM public.products WHERE name = 'DAP (18-46-0)';
 
     IF ltr_unit_id IS NOT NULL AND insecticide_cat_id IS NOT NULL THEN
-        INSERT INTO public.products (name, hsn_code, sku, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('Cypermethrin 10% EC', '38089199', 'INS-CYPER-1LTR', 800.00, 0.18, ltr_unit_id, insecticide_cat_id, 0) ON CONFLICT (sku) DO NOTHING;
+        INSERT INTO public.products (name, hsn_code, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('Cypermethrin 10% EC', '38089199', 800.00, 0.18, ltr_unit_id, insecticide_cat_id, 0) ON CONFLICT (name) DO NOTHING;
     END IF;
-    SELECT id INTO cyper_prod_id FROM public.products WHERE sku = 'INS-CYPER-1LTR';
+    SELECT id INTO cyper_prod_id FROM public.products WHERE name = 'Cypermethrin 10% EC';
 
     IF kg_unit_id IS NOT NULL AND fungicide_cat_id IS NOT NULL THEN
-        INSERT INTO public.products (name, hsn_code, sku, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('Mancozeb 75% WP', '38089290', 'FUN-MANCO-1KG', 650.00, 0.18, kg_unit_id, fungicide_cat_id, 0) ON CONFLICT (sku) DO NOTHING;
+        INSERT INTO public.products (name, hsn_code, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('Mancozeb 75% WP', '38089290', 650.00, 0.18, kg_unit_id, fungicide_cat_id, 0) ON CONFLICT (name) DO NOTHING;
     END IF;
-    SELECT id INTO mancozeb_prod_id FROM public.products WHERE sku = 'FUN-MANCO-1KG';
+    SELECT id INTO mancozeb_prod_id FROM public.products WHERE name = 'Mancozeb 75% WP';
 
     -- To ensure idempotency, we clear previous demo transactions
     DELETE FROM public.purchases WHERE reference_invoice IN ('PUR-2024-001', 'PUR-2024-002', 'PUR-2024-003');

@@ -1,6 +1,6 @@
 // Fix: Implement the ProductsPage component, which was missing.
 // Fix: Import `useState` from React to fix "Cannot find name 'useState'" errors.
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 // Fix: Import `keepPreviousData` from TanStack Query v5.
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '../hooks/lib/supabase';
@@ -8,7 +8,7 @@ import { Product, Category } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
-import { Pencil, Trash2, PlusCircle, Search } from 'lucide-react';
+import { Pencil, Trash2, PlusCircle, Search, ChevronDown } from 'lucide-react';
 import Dialog from '../components/ui/Dialog';
 import ProductForm from '../components/ProductForm';
 import { toast } from '../components/ui/Toaster';
@@ -63,6 +63,8 @@ const ProductsPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const { data: productsData, isLoading, error } = useQuery({
@@ -76,9 +78,19 @@ const ProductsPage: React.FC = () => {
       queryFn: fetchCategories
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearchTerm, selectedCategory]);
+  
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+            setIsDropdownOpen(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const products = productsData?.data ?? [];
   const totalCount = productsData?.count ?? 0;
@@ -115,6 +127,8 @@ const ProductsPage: React.FC = () => {
     setIsModalOpen(false);
     setSelectedProduct(undefined);
   };
+
+  const selectedCategoryLabel = categories?.find(c => c.id === selectedCategory)?.name || 'All Categories';
 
   const renderSkeleton = () => (
     <div className="overflow-x-auto">
@@ -165,17 +179,48 @@ const ProductsPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
              <CardTitle>Product List</CardTitle>
              <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-                <select
-                    value={selectedCategory || ''}
-                    onChange={(e) => setSelectedCategory(e.target.value || null)}
-                    className="flex h-10 w-full sm:w-48 rounded-md border border-slate-300 bg-transparent py-2 px-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={isLoadingCategories}
-                >
-                    <option value="">All Categories</option>
-                    {categories?.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                </select>
+                <div className="relative w-full sm:w-48" ref={dropdownRef}>
+                    <Button 
+                        type="button" 
+                        variant="outline" 
+                        className="w-full justify-between font-normal" 
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        aria-haspopup="listbox"
+                        aria-expanded={isDropdownOpen}
+                        disabled={isLoadingCategories}
+                    >
+                        <span className="truncate">{isLoadingCategories ? 'Loading...' : selectedCategoryLabel}</span>
+                        <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                    </Button>
+                    {isDropdownOpen && (
+                        <Card className="absolute z-10 w-full mt-1 rounded-md shadow-lg animate-scale-in origin-top">
+                            <CardContent className="p-1 max-h-60 overflow-y-auto">
+                                <button
+                                    type="button"
+                                    role="option"
+                                    aria-selected={!selectedCategory}
+                                    className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-sm"
+                                    onClick={() => { setSelectedCategory(null); setIsDropdownOpen(false); }}
+                                >
+                                    All Categories
+                                </button>
+                                {categories?.map(cat => (
+                                    <button
+                                        key={cat.id}
+                                        type="button"
+                                        role="option"
+                                        aria-selected={selectedCategory === cat.id}
+                                        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-sm flex items-center gap-2"
+                                        onClick={() => { setSelectedCategory(cat.id); setIsDropdownOpen(false); }}
+                                    >
+                                      <DynamicIcon name={cat.icon_name} className="w-4 h-4 text-slate-500" />
+                                      <span>{cat.name}</span>
+                                    </button>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
                 <div className="relative w-full sm:w-64">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                     <Input 

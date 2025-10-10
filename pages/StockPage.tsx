@@ -15,7 +15,7 @@ import { Link } from 'react-router-dom';
 
 const ITEMS_PER_PAGE = 10;
 
-type StockProduct = Pick<Product, 'id' | 'name' | 'sku' | 'stock_quantity'> & {
+type StockProduct = Pick<Product, 'id' | 'name' | 'stock_quantity'> & {
     units: Pick<Unit, 'abbreviation'> | null;
 };
 
@@ -25,10 +25,10 @@ const fetchStock = async (page: number, searchTerm: string): Promise<{ data: Sto
 
   let query = supabase
     .from('products')
-    .select('id, name, sku, stock_quantity, units(abbreviation)', { count: 'exact' });
+    .select('id, name, stock_quantity, units(abbreviation)', { count: 'exact' });
 
   if (searchTerm) {
-    query = query.or(`name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%`);
+    query = query.ilike('name', `%${searchTerm}%`);
   }
 
   const { data, error, count } = await query
@@ -75,7 +75,6 @@ const StockPage: React.FC = () => {
         <TableHeader>
           <TableRow>
             <TableHead>Product Name</TableHead>
-            <TableHead>SKU</TableHead>
             <TableHead>Current Stock</TableHead>
             <TableHead>Status</TableHead>
           </TableRow>
@@ -84,7 +83,6 @@ const StockPage: React.FC = () => {
           {Array.from({ length: ITEMS_PER_PAGE }).map((_, index) => (
             <TableRow key={index}>
               <TableCell><Skeleton className="h-5 w-3/4" /></TableCell>
-              <TableCell><Skeleton className="h-5 w-1/2" /></TableCell>
               <TableCell><Skeleton className="h-5 w-1/3" /></TableCell>
               <TableCell><Skeleton className="h-5 w-1/4" /></TableCell>
             </TableRow>
@@ -107,7 +105,7 @@ const StockPage: React.FC = () => {
                <div className="relative w-full sm:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <Input 
-                    placeholder="Search by name or SKU..."
+                    placeholder="Search by name..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
@@ -123,7 +121,6 @@ const StockPage: React.FC = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Product Name</TableHead>
-                      <TableHead>SKU</TableHead>
                       <TableHead>Current Stock</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
@@ -138,7 +135,6 @@ const StockPage: React.FC = () => {
                                 {product.name}
                             </Link>
                           </TableCell>
-                          <TableCell data-label="SKU">{product.sku || 'N/A'}</TableCell>
                           <TableCell data-label="Stock">{product.stock_quantity} {product.units?.abbreviation || ''}</TableCell>
                           <TableCell data-label="Status">
                              <Badge variant={status.variant}>{status.text}</Badge>
@@ -147,7 +143,7 @@ const StockPage: React.FC = () => {
                       );
                     }) : (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center h-24">No products found.</TableCell>
+                        <TableCell colSpan={3} className="text-center h-24">No products found.</TableCell>
                       </TableRow>
                     )}
                   </TableBody>

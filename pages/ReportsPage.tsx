@@ -150,7 +150,7 @@ const ReportsPage: React.FC = () => {
                     formatDate(item.transaction_date),
                     item.transaction_type,
                     item.product_name,
-                    { content: item.quantity_change > 0 ? `+${item.quantity_change}` : item.quantity_change, styles: { halign: 'right' } },
+                    item.quantity_change > 0 ? `+${item.quantity_change}` : item.quantity_change,
                     item.reference_number || 'N/A'
                 ]),
                 theme: 'grid',
@@ -158,6 +158,21 @@ const ReportsPage: React.FC = () => {
                 styles: { fontSize: 9 },
                 columnStyles: {
                     3: { halign: 'right' }
+                },
+                didParseCell: (data) => {
+                    // Target the 'Quantity Change' column (index 3) in the table body
+                    if (data.column.index === 3 && data.section === 'body') {
+                        const value = parseInt(data.cell.text[0], 10);
+                        if (value > 0) {
+                            // Purchases are green
+                            data.cell.styles.textColor = [40, 167, 69];
+                            data.cell.styles.fontStyle = 'bold';
+                        } else if (value < 0) {
+                            // Sales are red
+                            data.cell.styles.textColor = [220, 53, 69];
+                            data.cell.styles.fontStyle = 'bold';
+                        }
+                    }
                 }
             });
 

@@ -43,7 +43,6 @@ export type Product = Base & {
   name: string;
   description: string | null;
   hsn_code: string | null;
-  sku: string | null;
   stock_quantity: number;
   tax_rate: number; // Stored as decimal, e.g., 0.18 for 18%
   unit_price: number;
