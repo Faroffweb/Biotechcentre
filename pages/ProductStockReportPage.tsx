@@ -2,14 +2,18 @@ import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../hooks/lib/supabase';
-import { Product, Purchase, ProductSaleItem, Unit } from '../types';
+import { Product, Purchase, ProductSaleItem, Unit, CompanyDetails } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
 import Pagination from '../components/ui/Pagination';
 import Skeleton from '../components/ui/Skeleton';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 import { formatDate } from '../hooks/lib/utils';
 import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { toast } from '../components/ui/Toaster';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const ITEMS_PER_PAGE = 5;
 
@@ -61,10 +65,22 @@ const fetchAllProductSales = async (productId: string): Promise<ProductSaleItem[
     return (data as ProductSaleItem[]) || [];
 };
 
+const fetchCompanyDetails = async (): Promise<CompanyDetails | null> => {
+    const { data, error } = await supabase
+        .from('company_details')
+        .select('*')
+        .eq('id', 1)
+        .single();
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+};
+
+
 const ProductStockReportPage: React.FC = () => {
     const { productId } = useParams<{ productId: string }>();
     const navigate = useNavigate();
     const [currentPage, setCurrentPage] = useState(1);
+    const [isExporting, setIsExporting] = useState(false);
 
     if (!productId) {
         return <p className="text-red-500">Product ID is missing.</p>;
@@ -83,6 +99,11 @@ const ProductStockReportPage: React.FC = () => {
     const { data: sales, isLoading: isLoadingSales } = useQuery({
         queryKey: ['allProductSales', productId],
         queryFn: () => fetchAllProductSales(productId),
+    });
+
+    const { data: companyDetails } = useQuery({
+        queryKey: ['companyDetails'],
+        queryFn: fetchCompanyDetails,
     });
 
     const stockMovements = useMemo(() => {
@@ -134,6 +155,59 @@ const ProductStockReportPage: React.FC = () => {
         return stockMovements.slice(startIndex, startIndex + ITEMS_PER_PAGE);
     }, [currentPage, stockMovements]);
 
+    const handleExportPDF = () => {
+        if (!product || !stockMovements.length || !companyDetails) {
+            toast('Cannot export PDF: Missing required data.');
+            return;
+        }
+
+        setIsExporting(true);
+        toast('Generating PDF...');
+
+        try {
+            const doc = new jsPDF();
+            
+            // Header
+            doc.setFontSize(20);
+            doc.text(companyDetails.name || 'Bio Tech Centre', 105, 20, { align: 'center' });
+            doc.setFontSize(12);
+            doc.setTextColor(100);
+            doc.text(`Stock Movement Report for: ${product.name}`, 105, 28, { align: 'center' });
+
+            // Table
+            const tableData = stockMovements.map(item => [
+                formatDate(item.date),
+                item.type,
+                item.openingStock.toString(),
+                { content: item.quantityChange > 0 ? `+${item.quantityChange}` : item.quantityChange.toString(), styles: { halign: 'right' } },
+                item.reference,
+                item.closingStock.toString()
+            ]);
+
+            autoTable(doc, {
+                startY: 40,
+                head: [['Date', 'Type', 'Opening', 'Quantity', 'Reference', 'Closing']],
+                body: tableData,
+                theme: 'grid',
+                headStyles: { fillColor: [240, 240, 240], textColor: 20 },
+                styles: { fontSize: 9 },
+                columnStyles: {
+                    2: { halign: 'right' },
+                    3: { halign: 'right' },
+                    5: { halign: 'right' },
+                }
+            });
+            
+            doc.save(`Stock-Report-${product.name.replace(/\s/g, '_')}.pdf`);
+            toast('Report exported successfully!');
+        } catch (err) {
+            console.error("Export error:", err);
+            toast(`Export Failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
 
     if (isLoadingProduct) {
       return <div><Skeleton className="h-12 w-1/2 mb-6" /><Skeleton className="h-48 w-full" /></div>;
@@ -145,13 +219,19 @@ const ProductStockReportPage: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center gap-4">
-                <button onClick={() => navigate(-1)} className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Go back">
-                    <ArrowLeft className="w-6 h-6" />
-                </button>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 bg-clip-text text-transparent">
-                   Stock Report: {product?.name}
-                </h1>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <button onClick={() => navigate(-1)} className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700" aria-label="Go back">
+                        <ArrowLeft className="w-6 h-6" />
+                    </button>
+                    <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 bg-clip-text text-transparent">
+                       Stock Report: {product?.name}
+                    </h1>
+                </div>
+                <Button variant="outline" onClick={handleExportPDF} disabled={isExporting || !stockMovements.length}>
+                    <Download className="w-4 h-4 mr-2" />
+                    {isExporting ? 'Exporting...' : 'Export to PDF'}
+                </Button>
             </div>
 
             <Card>

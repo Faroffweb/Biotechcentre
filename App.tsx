@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from './components/ui/Toaster';
 import DashboardPage from './pages/DashboardPage';
@@ -16,8 +16,27 @@ import CategoriesPage from './pages/CategoriesPage';
 import ProductStockReportPage from './pages/ProductStockReportPage';
 import CompanySettingsPage from './pages/CompanySettingsPage';
 import CreateInvoicePage from './pages/CreateInvoicePage';
+import ImportExportPage from './pages/ImportExportPage';
+import PasswordProtectPage from './pages/PasswordProtectPage';
 
 const App: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Use an effect to check authentication status once on mount
+  useEffect(() => {
+    const isAuthed = sessionStorage.getItem('isAppAuthenticated') === 'true';
+    setIsAuthenticated(isAuthed);
+  }, []);
+
+  const handleAuthSuccess = () => {
+    setIsAuthenticated(true);
+  };
+
+  // If not authenticated, show the password page
+  if (!isAuthenticated) {
+    return <PasswordProtectPage onSuccess={handleAuthSuccess} />;
+  }
+  
   return (
     <HashRouter>
       <Routes>
@@ -37,6 +56,7 @@ const App: React.FC = () => {
           <Route path="settings/units" element={<UnitsPage />} />
           <Route path="settings/categories" element={<CategoriesPage />} />
           <Route path="settings/company" element={<CompanySettingsPage />} />
+          <Route path="settings/import-export" element={<ImportExportPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

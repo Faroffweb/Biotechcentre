@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { Building, LayoutGrid, Ruler, DatabaseBackup, ChevronRight } from 'lucide-react';
+import { Building, LayoutGrid, Ruler, UploadCloud, ChevronRight } from 'lucide-react';
 
 const settingsOptions = [
   {
@@ -23,10 +23,10 @@ const settingsOptions = [
     href: '/settings/units',
   },
   {
-    title: 'Backup',
-    description: 'Export your data for backup and offline use.',
-    icon: <DatabaseBackup className="w-6 h-6 text-slate-500" />,
-    href: '#', // Placeholder for future functionality
+    title: 'Import / Export',
+    description: 'Bulk import or export your data for backup and offline use.',
+    icon: <UploadCloud className="w-6 h-6 text-slate-500" />,
+    href: '/settings/import-export',
   },
 ];
 
@@ -45,9 +45,7 @@ const SettingsPage: React.FC = () => {
               <Link
                 key={option.title}
                 to={option.href}
-                className={`flex items-center justify-between p-4 transition-colors ${option.href === '#' ? 'cursor-not-allowed opacity-50' : 'hover:bg-slate-100/50 dark:hover:bg-slate-800/50'}`}
-                onClick={(e) => option.href === '#' && e.preventDefault()}
-                aria-disabled={option.href === '#'}
+                className="flex items-center justify-between p-4 transition-colors hover:bg-slate-100/50 dark:hover:bg-slate-800/50"
               >
                 <div className="flex items-center space-x-4">
                   <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-slate-100 rounded-lg dark:bg-slate-700">

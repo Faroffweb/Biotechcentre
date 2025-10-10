@@ -79,6 +79,12 @@ const deleteInvoice = async (invoiceId: string) => {
   if (error) throw new Error(error.message);
 };
 
+const WhatsAppIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" {...props} fill="currentColor">
+        <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.61 15.35 3.49 16.81L2 22L7.33 20.55C8.75 21.37 10.36 21.82 12.04 21.82H12.05C17.5 21.82 21.95 17.37 21.96 11.91C21.96 9.22 20.91 6.74 19.09 4.92C17.27 3.1 14.79 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.71 20.28 11.91C20.27 16.45 16.59 20.13 12.05 20.13H12.04C10.56 20.13 9.13 19.72 7.89 18.96L7.54 18.76L4.32 19.68L5.26 16.54L5.05 16.19C4.22 14.88 3.81 13.41 3.81 11.91C3.81 7.37 7.5 3.67 12.05 3.67M9.01 7.29C8.83 7.29 8.6 7.34 8.41 7.72C8.23 8.1 7.68 8.65 7.68 9.7C7.68 10.75 8.43 11.72 8.58 11.89C8.74 12.06 10.19 14.39 12.47 15.33C14.33 16.11 14.74 15.93 15.08 15.9C15.54 15.86 16.48 15.31 16.66 14.76C16.84 14.21 16.84 13.78 16.78 13.67C16.72 13.56 16.54 13.48 16.29 13.36C16.05 13.24 14.93 12.69 14.71 12.61C14.49 12.53 14.33 12.48 14.17 12.73C14.01 12.98 13.46 13.62 13.32 13.78C13.18 13.94 13.04 13.96 12.79 13.84C12.55 13.72 11.66 13.41 10.59 12.45C9.77 11.7 9.23 10.79 9.07 10.54C8.91 10.29 9.04 10.15 9.16 10.03C9.27 9.91 9.42 9.73 9.56 9.57C9.7 9.41 9.75 9.31 9.85 9.11C9.95 8.91 9.9 8.75 9.83 8.64C9.75 8.52 9.26 7.4 9.06 7.29" />
+    </svg>
+);
+
 const InvoicesPage: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -86,6 +92,7 @@ const InvoicesPage: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<FullInvoice | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [canShare, setCanShare] = useState(false);
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const { data: invoicesData, isLoading, error } = useQuery({
@@ -102,6 +109,12 @@ const InvoicesPage: React.FC = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearchTerm]);
+
+  useEffect(() => {
+    if (navigator.share) {
+        setCanShare(true);
+    }
+  }, []);
 
   const invoices = invoicesData?.data ?? [];
   const totalCount = invoicesData?.count ?? 0;
@@ -128,9 +141,9 @@ const InvoicesPage: React.FC = () => {
     }
   };
   
-  const handleExportPDF = () => {
+  const handleDownloadPDF = () => {
     if (!selectedInvoice || !companyDetails) {
-        toast('Cannot export PDF: Missing invoice or company data.');
+        toast('Cannot download PDF: Missing invoice or company data.');
         return;
     }
     
@@ -193,7 +206,6 @@ const InvoicesPage: React.FC = () => {
         theme: 'grid',
         headStyles: { fillColor: [230, 230, 230], textColor: 20 },
         didDrawPage: (data) => {
-            // This captures the y position after the table is drawn.
             finalY = data.cursor?.y || 0;
         }
     });
@@ -213,10 +225,10 @@ const InvoicesPage: React.FC = () => {
         ],
         theme: 'plain',
         tableWidth: 80,
-        margin: { left: 115 }, // Align to the right
+        margin: { left: 115 },
     });
     
-    finalY = (doc as any).lastAutoTable.finalY; // Update finalY after totals table
+    finalY = (doc as any).lastAutoTable.finalY;
 
     // --- Notes & Bank Details ---
     let notesY = finalY + 15;
@@ -240,6 +252,70 @@ const InvoicesPage: React.FC = () => {
     doc.text('This is a computer-generated invoice.', 105, pageHeight - 10, { align: 'center' });
 
     doc.save(`Invoice-${invoice.invoice_number}.pdf`);
+  };
+  
+  const handleShareWhatsApp = async () => {
+    if (!selectedInvoice || !companyDetails) {
+        toast('Cannot share: Missing invoice or company data.');
+        return;
+    }
+    
+    toast('Preparing to share...');
+
+    try {
+        const doc = new jsPDF();
+        const invoice = selectedInvoice;
+        const company = companyDetails;
+        const pageHeight = doc.internal.pageSize.getHeight();
+        let finalY = 0;
+
+        // PDF Generation Logic (same as download)
+        doc.setFontSize(20).text(company.name || 'Company Name', 14, 22);
+        doc.setFontSize(10).text(company.address || '', 14, 30);
+        doc.text(`GSTIN: ${company.gstin || 'N/A'}`, 14, 35).text(`PAN: ${company.pan || 'N/A'}`, 14, 40);
+        doc.setFontSize(16).text('Tax Invoice', 200, 22, { align: 'right' });
+        doc.setFontSize(10).text(`Invoice No: ${invoice.invoice_number}`, 200, 30, { align: 'right' }).text(`Date: ${formatDate(invoice.invoice_date)}`, 200, 35, { align: 'right' });
+        doc.setLineWidth(0.5).line(14, 45, 200, 45);
+        doc.setFont('helvetica', 'bold').text('Billed To:', 14, 55);
+        doc.setFont('helvetica', 'normal').text(invoice.customers?.name || 'Guest Customer', 14, 60);
+        const addressLines = doc.splitTextToSize(invoice.customers?.billing_address || 'N/A', 80);
+        doc.text(addressLines, 14, 65);
+        const addressHeight = addressLines.length * 5;
+        doc.text(`GSTIN: ${invoice.customers?.gstin || 'N/A'}`, 14, 65 + addressHeight);
+        doc.text(`Phone: ${invoice.customers?.phone || 'N/A'}`, 14, 70 + addressHeight);
+        const tableData = invoice.invoice_items.map((item, index) => {
+            const taxableAmount = item.quantity * item.unit_price;
+            const total = taxableAmount * (1 + item.tax_rate);
+            return [index + 1, item.products?.name || 'N/A', item.products?.hsn_code || 'N/A', item.quantity, formatCurrency(item.unit_price), formatCurrency(taxableAmount), `${(item.tax_rate * 100).toFixed(0)}%`, formatCurrency(total)];
+        });
+        autoTable(doc, { startY: 80 + addressHeight, head: [['#', 'Item', 'HSN', 'Qty', 'Rate', 'Taxable', 'GST', 'Total']], body: tableData, theme: 'grid', headStyles: { fillColor: [230, 230, 230], textColor: 20 }, didDrawPage: (data) => { finalY = data.cursor?.y || 0; }});
+        const taxableTotal = invoice.invoice_items.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0);
+        const taxTotal = invoice.total_amount - taxableTotal;
+        const totalsY = finalY + 10 > pageHeight - 50 ? 20 : finalY + 10;
+        autoTable(doc, { startY: totalsY, body: [['Subtotal', formatCurrency(taxableTotal)], ['CGST', formatCurrency(taxTotal / 2)], ['SGST', formatCurrency(taxTotal / 2)], [{ content: 'Grand Total', styles: { fontStyle: 'bold' } }, { content: formatCurrency(invoice.total_amount), styles: { fontStyle: 'bold' } }]], theme: 'plain', tableWidth: 80, margin: { left: 115 } });
+        finalY = (doc as any).lastAutoTable.finalY;
+        doc.setFontSize(8).setTextColor(150).text('This is a computer-generated invoice.', 105, pageHeight - 10, { align: 'center' });
+
+        const pdfBlob = doc.output('blob');
+        const fileName = `Invoice-${invoice.invoice_number}.pdf`;
+        const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        
+        const shareData = {
+            files: [pdfFile],
+            title: `Invoice ${invoice.invoice_number}`,
+            text: `Here is invoice ${invoice.invoice_number} from ${company.name || 'our company'}.`,
+        };
+
+        if (navigator.canShare && navigator.canShare(shareData)) {
+            await navigator.share(shareData);
+        } else {
+            toast('Sharing not supported on this browser or for this file type.');
+        }
+    } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+             toast(`Sharing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
   };
 
   const handleDeleteClick = (invoiceId: string) => {
@@ -365,10 +441,16 @@ const InvoicesPage: React.FC = () => {
          {selectedInvoice && (
           <div>
             <div className="flex justify-end gap-2 mb-4 no-print">
-               <Button onClick={handleExportPDF}>
+               <Button onClick={handleDownloadPDF}>
                   <Download className="w-4 h-4 mr-2" />
-                  Export to PDF
+                  Download
                </Button>
+               {canShare && (
+                <Button variant="secondary" onClick={handleShareWhatsApp}>
+                    <WhatsAppIcon className="w-5 h-5 mr-2" />
+                    Share via WhatsApp
+                </Button>
+               )}
             </div>
             <div>
                <InvoiceTemplate invoice={selectedInvoice} companyDetails={companyDetails || null} />

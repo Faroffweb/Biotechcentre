@@ -75,17 +75,12 @@ const upsertInvoice = async ({ formData, id }: { formData: Omit<FormValues, 'new
     
     const itemsToSave = formData.items.map(({ product_name_display, inclusive_rate, ...rest }) => rest);
     
-    // Calculate total amount on the client-side before sending to DB.
-    // The DB trigger is a fallback, but this provides a value immediately.
-    const total_amount = itemsToSave.reduce((acc, item) => {
-        return acc + (item.quantity * item.unit_price * (1 + item.tax_rate));
-    }, 0);
-
-    const finalInvoiceData = { ...invoiceData, total_amount };
+    // The total amount is now calculated by a database trigger for accuracy.
+    // We no longer send it from the client.
 
     if (id) {
         // Update
-        const { data: updatedInvoice, error: invoiceError } = await supabase.from('invoices').update(finalInvoiceData).eq('id', id).select('id').single();
+        const { data: updatedInvoice, error: invoiceError } = await supabase.from('invoices').update(invoiceData).eq('id', id).select('id').single();
         if (invoiceError) throw invoiceError;
         const { error: deleteError } = await supabase.from('invoice_items').delete().eq('invoice_id', id);
         if (deleteError) throw deleteError;
@@ -95,7 +90,7 @@ const upsertInvoice = async ({ formData, id }: { formData: Omit<FormValues, 'new
         return updatedInvoice;
     } else {
         // Create
-        const { data: newInvoice, error: invoiceError } = await supabase.from('invoices').insert(finalInvoiceData).select('id').single();
+        const { data: newInvoice, error: invoiceError } = await supabase.from('invoices').insert(invoiceData).select('id').single();
         if (invoiceError) throw invoiceError;
         const itemsData = itemsToSave.map(item => ({ ...item, invoice_id: newInvoice.id }));
         const { error: itemsError } = await supabase.from('invoice_items').insert(itemsData);

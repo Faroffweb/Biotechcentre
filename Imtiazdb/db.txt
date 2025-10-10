@@ -170,42 +170,48 @@ BEFORE INSERT ON public.invoice_items
 FOR EACH ROW
 EXECUTE FUNCTION public.set_invoice_item_user_id();
 
--- Function to automatically calculate and update the total_amount on an invoice (INCREMENTAL)
-CREATE OR REPLACE FUNCTION public.update_invoice_totals()
+-- Function to recalculate the entire invoice total from its items. This is more robust than an incremental approach.
+CREATE OR REPLACE FUNCTION public.recalculate_invoice_total()
 RETURNS TRIGGER AS $$
 DECLARE
-    old_item_total numeric;
-    new_item_total numeric;
+    invoice_to_update_id uuid;
 BEGIN
-    IF (TG_OP = 'INSERT') THEN
-        new_item_total := NEW.quantity * NEW.unit_price * (1 + NEW.tax_rate);
-        UPDATE public.invoices SET total_amount = total_amount + new_item_total WHERE id = NEW.invoice_id;
-        RETURN NULL;
-    END IF;
+    -- Determine which invoice ID to use for the update
     IF (TG_OP = 'DELETE') THEN
-        old_item_total := OLD.quantity * OLD.unit_price * (1 + OLD.tax_rate);
-        UPDATE public.invoices SET total_amount = total_amount - old_item_total WHERE id = OLD.invoice_id;
-        RETURN NULL;
+        invoice_to_update_id := OLD.invoice_id;
+    ELSE
+        invoice_to_update_id := NEW.invoice_id;
     END IF;
-    IF (TG_OP = 'UPDATE') THEN
-        old_item_total := OLD.quantity * OLD.unit_price * (1 + OLD.tax_rate);
-        new_item_total := NEW.quantity * NEW.unit_price * (1 + NEW.tax_rate);
-        IF OLD.invoice_id <> NEW.invoice_id THEN
-            UPDATE public.invoices SET total_amount = total_amount - old_item_total WHERE id = OLD.invoice_id;
-            UPDATE public.invoices SET total_amount = total_amount + new_item_total WHERE id = NEW.invoice_id;
-        ELSE
-            UPDATE public.invoices SET total_amount = total_amount - old_item_total + new_item_total WHERE id = NEW.invoice_id;
-        END IF;
-        RETURN NULL;
+
+    -- Perform the recalculation for the affected invoice
+    UPDATE public.invoices
+    SET total_amount = (
+        SELECT COALESCE(SUM(quantity * unit_price * (1 + tax_rate)), 0)
+        FROM public.invoice_items
+        WHERE invoice_id = invoice_to_update_id
+    )
+    WHERE id = invoice_to_update_id;
+    
+    -- If an UPDATE operation moves an item to a different invoice, the old invoice must also be recalculated.
+    IF (TG_OP = 'UPDATE' AND NEW.invoice_id <> OLD.invoice_id) THEN
+        UPDATE public.invoices
+        SET total_amount = (
+            SELECT COALESCE(SUM(quantity * unit_price * (1 + tax_rate)), 0)
+            FROM public.invoice_items
+            WHERE invoice_id = OLD.invoice_id
+        )
+        WHERE id = OLD.invoice_id;
     END IF;
+
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
--- Trigger for invoice totals
-CREATE TRIGGER on_invoice_item_change
+-- Trigger for invoice totals (replaces the old incremental trigger)
+DROP TRIGGER IF EXISTS on_invoice_item_change ON public.invoice_items;
+CREATE TRIGGER on_invoice_item_change_recalculate
 AFTER INSERT OR UPDATE OR DELETE ON public.invoice_items
 FOR EACH ROW
-EXECUTE FUNCTION public.update_invoice_totals();
+EXECUTE FUNCTION public.recalculate_invoice_total();
 
 -- Function to automatically update product stock levels when a purchase is recorded.
 CREATE OR REPLACE FUNCTION public.update_stock_on_purchase()

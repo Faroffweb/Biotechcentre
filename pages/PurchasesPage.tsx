@@ -97,7 +97,7 @@ const PurchasesPage: React.FC = () => {
     setIsModalOpen(false);
     setSelectedPurchase(undefined);
   };
-  
+
   const renderSkeleton = () => (
     <div className="overflow-x-auto">
       <Table>
