@@ -12,7 +12,7 @@ interface InvoiceTemplateProps {
     companyDetails: CompanyDetails | null;
 }
 
-const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>(({ invoice, companyDetails }, ref) => {
+const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({ invoice, companyDetails }) => {
     // Calculations
     const taxableAmount = invoice.invoice_items.reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
     const totalCGST = invoice.invoice_items.reduce((acc, item) => acc + (item.quantity * item.unit_price * item.tax_rate / 2), 0);
@@ -53,7 +53,7 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
     `;
 
     return (
-        <div ref={ref}>
+        <div>
             <style>{styles}</style>
             <div className="page">
                 <div className="header">
@@ -165,6 +165,6 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
             </div>
         </div>
     );
-});
+};
 
 export default InvoiceTemplate;

@@ -1,9 +1,7 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '../hooks/lib/supabase';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
@@ -12,6 +10,10 @@ import Pagination from '../components/ui/Pagination';
 import Skeleton from '../components/ui/Skeleton';
 import { formatDate } from '../hooks/lib/utils';
 import { Download, ChevronDown } from 'lucide-react';
+import { toast } from '../components/ui/Toaster';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { CompanyDetails } from '../types';
 
 const ITEMS_PER_PAGE = 15;
 
@@ -52,6 +54,16 @@ const fetchReportData = async ({ page, transactionType, startDate, endDate }: { 
     return { data: data || [], count: countData || 0 };
 };
 
+const fetchCompanyDetails = async (): Promise<CompanyDetails | null> => {
+    const { data, error } = await supabase
+        .from('company_details')
+        .select('*')
+        .eq('id', 1)
+        .single();
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+};
+
 const formatDateForInput = (date: Date) => {
     const d = new Date(date);
     const year = d.getFullYear();
@@ -59,7 +71,6 @@ const formatDateForInput = (date: Date) => {
     const day = (`0${d.getDate()}`).slice(-2);
     return `${year}-${month}-${day}`;
 };
-
 
 const ReportsPage: React.FC = () => {
     const today = new Date();
@@ -69,8 +80,8 @@ const ReportsPage: React.FC = () => {
     const [startDate, setStartDate] = useState(formatDateForInput(firstDayOfMonth));
     const [endDate, setEndDate] = useState(formatDateForInput(today));
     const [currentPage, setCurrentPage] = useState(1);
+    const [isExporting, setIsExporting] = useState(false);
     
-    // State and ref for the custom dropdown
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -79,12 +90,16 @@ const ReportsPage: React.FC = () => {
         queryFn: () => fetchReportData({ page: currentPage, transactionType, startDate, endDate }),
         placeholderData: keepPreviousData,
     });
+    
+    const { data: companyDetails } = useQuery({
+        queryKey: ['companyDetails'],
+        queryFn: fetchCompanyDetails,
+    });
 
     const reportItems = data?.data ?? [];
     const totalCount = data?.count ?? 0;
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
-    // Effect to close dropdown on outside click
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -92,15 +107,70 @@ const ReportsPage: React.FC = () => {
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
+        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Reset page to 1 when filters change
     useEffect(() => {
         setCurrentPage(1);
     }, [transactionType, startDate, endDate]);
+
+    const handleExportPDF = async () => {
+        setIsExporting(true);
+        toast('Generating report, please wait...');
+        try {
+            const { data: reportData, error } = await supabase.rpc('export_combined_report', {
+                p_start_date: startDate,
+                p_end_date: endDate,
+                p_transaction_type: transactionType
+            });
+
+            if (error) throw error;
+            if (!reportData || reportData.length === 0) {
+                toast('No data to export for the selected filters.');
+                setIsExporting(false);
+                return;
+            }
+            
+            const doc = new jsPDF();
+
+            // Report Header
+            doc.setFontSize(20);
+            doc.text(companyDetails?.name || 'Bio Tech Centre', 105, 20, { align: 'center' });
+            doc.setFontSize(12);
+            doc.setTextColor(100);
+            doc.text(`Product Transaction Report`, 105, 28, { align: 'center' });
+            doc.setFontSize(10);
+            doc.text(`${formatDate(startDate)} to ${formatDate(endDate)}`, 105, 34, { align: 'center' });
+            
+            // Report Table
+            autoTable(doc, {
+                startY: 40,
+                head: [['Date', 'Type', 'Product', 'Quantity Change', 'Reference #']],
+                body: reportData.map((item: any) => [
+                    formatDate(item.transaction_date),
+                    item.transaction_type,
+                    item.product_name,
+                    { content: item.quantity_change > 0 ? `+${item.quantity_change}` : item.quantity_change, styles: { halign: 'right' } },
+                    item.reference_number || 'N/A'
+                ]),
+                theme: 'grid',
+                headStyles: { fillColor: [240, 240, 240], textColor: 20 },
+                styles: { fontSize: 9 },
+                columnStyles: {
+                    3: { halign: 'right' }
+                }
+            });
+
+            doc.save(`Report-${startDate}-to-${endDate}.pdf`);
+            toast('Report exported successfully!');
+
+        } catch (err) {
+            console.error("Export error:", err);
+            toast(`Export Failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     const renderSkeleton = () => (
         <Table>
@@ -130,19 +200,21 @@ const ReportsPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-600 bg-clip-text text-transparent">Transaction Report</h1>
-        <Button variant="outline" disabled>
+        <Button variant="outline" onClick={handleExportPDF} disabled={isExporting}>
           <Download className="w-4 h-4 mr-2" />
-          Export Report
+          {isExporting ? 'Exporting...' : 'Export to PDF'}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <CardTitle>Filter Transactions</CardTitle>
-            <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+            <CardDescription>Select a date range and transaction type to generate a report.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row items-center justify-end gap-2 p-4 mb-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                 <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-                <span className="text-gray-500">to</span>
+                <span className="text-gray-500 dark:text-gray-400">to</span>
                 <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
                 <div className="relative w-full sm:w-40" ref={dropdownRef}>
                     <Button 
@@ -179,9 +251,6 @@ const ReportsPage: React.FC = () => {
                     )}
                 </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent>
            {isLoading ? renderSkeleton() : error instanceof Error ? <p className="text-red-500">Error: {error.message}</p> : (
             <>
               <div className="overflow-x-auto">

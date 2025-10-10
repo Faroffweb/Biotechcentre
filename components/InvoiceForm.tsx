@@ -273,16 +273,13 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
     // FIX: Prepare the form data for the mutation by removing temporary fields 
     // (`customer_name_display`, `new_customer_*`) to match the expected type of `upsertInvoice`.
     // This also resolves the error caused by an incorrect transformation of the `items` array.
-    const { 
-        customer_name_display, 
-        new_customer_name, 
-        new_customer_phone, 
-        new_customer_gstin, 
-        new_customer_billing_address, 
-        ...formDataForMutation 
-    } = {
-      ...data,
+    // Fix: Replaced the failing destructuring assignment with explicit object creation to resolve binding errors.
+    const formDataForMutation = {
       customer_id: finalCustomerId,
+      invoice_date: data.invoice_date,
+      invoice_number: data.invoice_number,
+      notes: data.notes,
+      items: data.items,
     };
     
     mutation.mutate({ formData: formDataForMutation, id: invoice?.id });
@@ -312,7 +309,16 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><label htmlFor="new_customer_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label><Input id="new_customer_name" {...register('new_customer_name', { required: customerMode === 'new' ? 'Customer name is required.' : false })} />{errors.new_customer_name && <p className="mt-1 text-sm text-red-500">{errors.new_customer_name.message}</p>}</div>
                         <div><label htmlFor="new_customer_phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Phone</label><Input id="new_customer_phone" {...register('new_customer_phone')} /></div>
-                        <div><label htmlFor="new_customer_gstin" className="block text-sm font-medium text-gray-700 dark:text-gray-300">GSTIN</label><Input id="new_customer_gstin" {...register('new_customer_gstin')} /></div>
+                        <div>
+                           <label htmlFor="new_customer_gstin" className="block text-sm font-medium text-gray-700 dark:text-gray-300">GSTIN</label>
+                           <Input id="new_customer_gstin" {...register('new_customer_gstin', {
+                                pattern: {
+                                    value: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i,
+                                    message: "Invalid GSTIN format."
+                                }
+                           })} />
+                           {errors.new_customer_gstin && <p className="mt-1 text-sm text-red-500">{errors.new_customer_gstin.message}</p>}
+                        </div>
                         <div className="md:col-span-2"><label htmlFor="new_customer_billing_address" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Billing Address</label><textarea id="new_customer_billing_address" rows={2} className="flex w-full rounded-md border border-slate-300 bg-transparent py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700" {...register('new_customer_billing_address')} /></div>
                     </div>
                 </div>

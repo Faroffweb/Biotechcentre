@@ -118,3 +118,12 @@ export type ProductSaleItem = InvoiceItem & {
     } | null;
   } | null;
 };
+
+// For ReportsPage.tsx export
+export type ExportReportItem = {
+    transaction_date: string;
+    transaction_type: 'Sale' | 'Purchase';
+    reference_number: string | null;
+    product_name: string;
+    quantity_change: number;
+};

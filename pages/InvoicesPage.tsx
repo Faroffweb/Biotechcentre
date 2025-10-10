@@ -5,7 +5,7 @@ import { InvoiceWithDetails, InvoiceItem, Invoice, Customer, Unit, CompanyDetail
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
-import { PlusCircle, Pencil, Trash2, Printer, Search, Eye } from 'lucide-react';
+import { PlusCircle, Pencil, Trash2, Download, Search, Eye } from 'lucide-react';
 import { formatDate, formatCurrency } from '../hooks/lib/utils';
 import Pagination from '../components/ui/Pagination';
 import Dialog from '../components/ui/Dialog';
@@ -15,6 +15,8 @@ import { Input } from '../components/ui/Input';
 import { useDebounce } from '../hooks/useDebounce';
 import Skeleton from '../components/ui/Skeleton';
 import { useNavigate } from 'react-router-dom';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -85,7 +87,6 @@ const InvoicesPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
-  const printRef = React.useRef<HTMLDivElement>(null);
 
   const { data: invoicesData, isLoading, error } = useQuery({
     queryKey: ['invoices', currentPage, debouncedSearchTerm],
@@ -127,8 +128,118 @@ const InvoicesPage: React.FC = () => {
     }
   };
   
-  const handlePrint = () => {
-      window.print();
+  const handleExportPDF = () => {
+    if (!selectedInvoice || !companyDetails) {
+        toast('Cannot export PDF: Missing invoice or company data.');
+        return;
+    }
+    
+    toast('Generating PDF...');
+
+    const doc = new jsPDF();
+    const invoice = selectedInvoice;
+    const company = companyDetails;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let finalY = 0; // Track the final Y position after the table
+
+    // --- Header ---
+    doc.setFontSize(20);
+    doc.text(company.name || 'Company Name', 14, 22);
+    doc.setFontSize(10);
+    doc.text(company.address || '', 14, 30);
+    doc.text(`GSTIN: ${company.gstin || 'N/A'}`, 14, 35);
+    doc.text(`PAN: ${company.pan || 'N/A'}`, 14, 40);
+
+    doc.setFontSize(16);
+    doc.text('Tax Invoice', 200, 22, { align: 'right' });
+    doc.setFontSize(10);
+    doc.text(`Invoice No: ${invoice.invoice_number}`, 200, 30, { align: 'right' });
+    doc.text(`Date: ${formatDate(invoice.invoice_date)}`, 200, 35, { align: 'right' });
+
+    doc.setLineWidth(0.5);
+    doc.line(14, 45, 200, 45);
+
+    // --- Billed To Section ---
+    doc.setFontSize(10).setFont('helvetica', 'bold');
+    doc.text('Billed To:', 14, 55);
+    doc.setFont('helvetica', 'normal');
+    doc.text(invoice.customers?.name || 'Guest Customer', 14, 60);
+    const addressLines = doc.splitTextToSize(invoice.customers?.billing_address || 'N/A', 80);
+    doc.text(addressLines, 14, 65);
+    const addressHeight = addressLines.length * 5;
+    doc.text(`GSTIN: ${invoice.customers?.gstin || 'N/A'}`, 14, 65 + addressHeight);
+    doc.text(`Phone: ${invoice.customers?.phone || 'N/A'}`, 14, 70 + addressHeight);
+
+    // --- Items Table ---
+    const tableData = invoice.invoice_items.map((item, index) => {
+        const taxableAmount = item.quantity * item.unit_price;
+        const total = taxableAmount * (1 + item.tax_rate);
+        return [
+            index + 1,
+            item.products?.name || 'N/A',
+            item.products?.hsn_code || 'N/A',
+            item.quantity,
+            formatCurrency(item.unit_price),
+            formatCurrency(taxableAmount),
+            `${(item.tax_rate * 100).toFixed(0)}%`,
+            formatCurrency(total),
+        ];
+    });
+
+    autoTable(doc, {
+        startY: 80 + addressHeight,
+        head: [['#', 'Item', 'HSN', 'Qty', 'Rate', 'Taxable', 'GST', 'Total']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [230, 230, 230], textColor: 20 },
+        didDrawPage: (data) => {
+            // This captures the y position after the table is drawn.
+            finalY = data.cursor?.y || 0;
+        }
+    });
+
+    // --- Totals Section ---
+    const taxableTotal = invoice.invoice_items.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0);
+    const taxTotal = invoice.total_amount - taxableTotal;
+    const totalsY = finalY + 10 > pageHeight - 50 ? 20 : finalY + 10;
+    
+    autoTable(doc, {
+        startY: totalsY,
+        body: [
+            ['Subtotal', formatCurrency(taxableTotal)],
+            ['CGST', formatCurrency(taxTotal / 2)],
+            ['SGST', formatCurrency(taxTotal / 2)],
+            [{ content: 'Grand Total', styles: { fontStyle: 'bold' } }, { content: formatCurrency(invoice.total_amount), styles: { fontStyle: 'bold' } }],
+        ],
+        theme: 'plain',
+        tableWidth: 80,
+        margin: { left: 115 }, // Align to the right
+    });
+    
+    finalY = (doc as any).lastAutoTable.finalY; // Update finalY after totals table
+
+    // --- Notes & Bank Details ---
+    let notesY = finalY + 15;
+    if (invoice.notes) {
+      doc.setFont('helvetica', 'bold').text('Notes:', 14, notesY);
+      doc.setFont('helvetica', 'normal');
+      const notesLines = doc.splitTextToSize(invoice.notes, 180);
+      doc.text(notesLines, 14, notesY + 5);
+      notesY += notesLines.length * 5 + 5;
+    }
+
+    doc.setFont('helvetica', 'bold').text('Bank Details:', 14, notesY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Account Name: ${company.account_name || 'N/A'}`, 14, notesY + 5);
+    doc.text(`Account No: ${company.account_number || 'N/A'}`, 14, notesY + 10);
+    doc.text(`Bank: ${company.bank_name || 'N/A'}`, 14, notesY + 15);
+    doc.text(`IFSC: ${company.ifsc_code || 'N/A'}`, 14, notesY + 20);
+
+    // --- Footer ---
+    doc.setFontSize(8).setTextColor(150);
+    doc.text('This is a computer-generated invoice.', 105, pageHeight - 10, { align: 'center' });
+
+    doc.save(`Invoice-${invoice.invoice_number}.pdf`);
   };
 
   const handleDeleteClick = (invoiceId: string) => {
@@ -254,13 +365,13 @@ const InvoicesPage: React.FC = () => {
          {selectedInvoice && (
           <div>
             <div className="flex justify-end gap-2 mb-4 no-print">
-               <Button onClick={handlePrint}>
-                  <Printer className="w-4 h-4 mr-2" />
-                  Print / Save PDF
+               <Button onClick={handleExportPDF}>
+                  <Download className="w-4 h-4 mr-2" />
+                  Export to PDF
                </Button>
             </div>
-            <div className="print-container">
-               <InvoiceTemplate ref={printRef} invoice={selectedInvoice} companyDetails={companyDetails || null} />
+            <div>
+               <InvoiceTemplate invoice={selectedInvoice} companyDetails={companyDetails || null} />
             </div>
           </div>
          )}

@@ -65,7 +65,13 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ companyDetails }) => {
                     </div>
                     <div>
                         <label htmlFor="gstin" className="block text-sm font-medium text-gray-700 dark:text-gray-300">GSTIN</label>
-                        <Input id="gstin" {...register('gstin')} />
+                        <Input id="gstin" {...register('gstin', {
+                            pattern: {
+                                value: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i,
+                                message: "Invalid GSTIN format. Should be like 29ABCDE1234F1Z5."
+                            }
+                        })} />
+                        {errors.gstin && <p className="mt-1 text-sm text-red-500">{errors.gstin.message}</p>}
                     </div>
                     <div>
                         <label htmlFor="pan" className="block text-sm font-medium text-gray-700 dark:text-gray-300">PAN</label>
