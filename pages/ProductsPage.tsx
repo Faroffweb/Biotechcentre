@@ -168,7 +168,7 @@ const ProductsPage: React.FC = () => {
                 <select
                     value={selectedCategory || ''}
                     onChange={(e) => setSelectedCategory(e.target.value || null)}
-                    className="flex h-10 w-full sm:w-48 rounded-md border border-slate-300 bg-transparent py-2 px-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-50 dark:focus:ring-slate-400 dark:focus:ring-offset-slate-900"
+                    className="flex h-10 w-full sm:w-48 rounded-md border border-slate-300 bg-transparent py-2 px-3 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={isLoadingCategories}
                 >
                     <option value="">All Categories</option>
@@ -207,7 +207,7 @@ const ProductsPage: React.FC = () => {
                     {products.length > 0 ? products.map((product) => (
                       <TableRow key={product.id}>
                         <TableCell data-label="Name" className="font-medium">
-                          <Link to={`/stock/${product.id}`} className="hover:underline text-blue-600 dark:text-blue-400">
+                          <Link to={`/stock/${product.id}`} className="hover:underline text-blue-600">
                             {product.name}
                           </Link>
                         </TableCell>

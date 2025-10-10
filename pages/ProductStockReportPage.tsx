@@ -55,9 +55,8 @@ const fetchAllProductPurchases = async (productId: string): Promise<Purchase[]> 
 const fetchAllProductSales = async (productId: string): Promise<ProductSaleItem[]> => {
     const { data, error } = await supabase
         .from('invoice_items')
-        .select('*, invoices!inner(invoice_number, invoice_date, status, customers(name))')
-        .eq('product_id', productId)
-        .in('invoices.status', ['sent', 'paid']); // Only count sales from finalized invoices
+        .select('*, invoices!inner(invoice_number, invoice_date, customers(name))')
+        .eq('product_id', productId);
     if (error) throw new Error(error.message);
     return (data as ProductSaleItem[]) || [];
 };

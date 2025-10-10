@@ -6,8 +6,8 @@
 -- To use, copy and paste the entire script into the Supabase SQL Editor and run it.
 
 -- 0. Types
--- Create a new ENUM type for invoice statuses
-CREATE TYPE public.invoice_status AS ENUM ('draft', 'sent', 'paid', 'cancelled');
+-- The `invoice_status` ENUM is no longer needed and should be dropped if it exists.
+DROP TYPE IF EXISTS public.invoice_status;
 
 
 -- 1. Tables
@@ -42,7 +42,8 @@ CREATE TABLE public.customers (
     gstin text,
     billing_address text,
     is_guest boolean NOT NULL DEFAULT false,
-    CONSTRAINT customers_pkey PRIMARY KEY (id)
+    CONSTRAINT customers_pkey PRIMARY KEY (id),
+    CONSTRAINT customers_name_key UNIQUE (name)
 );
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 
@@ -120,8 +121,8 @@ CREATE TABLE public.invoices (
     customer_id uuid, -- Now nullable for guest/anonymous invoices
     invoice_number text NOT NULL,
     invoice_date date NOT NULL,
+    notes text,
     total_amount numeric NOT NULL DEFAULT 0,
-    status public.invoice_status NOT NULL DEFAULT 'draft', -- Added status column
     CONSTRAINT invoices_pkey PRIMARY KEY (id),
     CONSTRAINT invoices_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE RESTRICT,
     CONSTRAINT invoices_invoice_number_key UNIQUE (invoice_number) -- Invoice number should be unique across all invoices
@@ -224,65 +225,42 @@ AFTER INSERT OR UPDATE OR DELETE ON public.purchases
 FOR EACH ROW
 EXECUTE FUNCTION public.update_stock_on_purchase();
 
-
--- NEW: Function to adjust stock based on INVOICE STATUS changes.
-CREATE OR REPLACE FUNCTION public.handle_invoice_status_change()
+-- NEW: Function to update stock when an invoice item is created, updated, or deleted.
+CREATE OR REPLACE FUNCTION public.update_stock_on_sale()
 RETURNS TRIGGER AS $$
-DECLARE
-    item RECORD;
 BEGIN
-    -- Do nothing if status hasn't changed
-    IF OLD.status = NEW.status THEN
-        RETURN NULL;
-    END IF;
-    -- Stock Deduction: Moving TO a 'finalized' state (sent, paid) from a non-finalized state
-    IF NEW.status IN ('sent', 'paid') AND OLD.status NOT IN ('sent', 'paid') THEN
-        FOR item IN SELECT product_id, quantity FROM public.invoice_items WHERE invoice_id = NEW.id LOOP
+    IF (TG_OP = 'INSERT') THEN
+        -- Deduct stock when an item is added to an invoice
+        UPDATE public.products
+        SET stock_quantity = stock_quantity - NEW.quantity
+        WHERE id = NEW.product_id;
+    ELSIF (TG_OP = 'DELETE') THEN
+        -- Return stock when an item is removed from an invoice
+        UPDATE public.products
+        SET stock_quantity = stock_quantity + OLD.quantity
+        WHERE id = OLD.product_id;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        -- Handle changes in quantity or product for the same item
+        IF OLD.product_id <> NEW.product_id THEN
+            -- Product was changed: restore stock for the old product, deduct for the new one
+            UPDATE public.products SET stock_quantity = stock_quantity + OLD.quantity WHERE id = OLD.product_id;
+            UPDATE public.products SET stock_quantity = stock_quantity - NEW.quantity WHERE id = NEW.product_id;
+        ELSE
+            -- Only quantity changed: adjust stock for the same product
             UPDATE public.products
-            SET stock_quantity = stock_quantity - item.quantity
-            WHERE id = item.product_id;
-        END LOOP;
-    END IF;
-    -- Stock Return: Moving FROM a 'finalized' state to a non-finalized state
-    IF OLD.status IN ('sent', 'paid') AND NEW.status NOT IN ('sent', 'paid') THEN
-         FOR item IN SELECT product_id, quantity FROM public.invoice_items WHERE invoice_id = NEW.id LOOP
-            UPDATE public.products
-            SET stock_quantity = stock_quantity + item.quantity
-            WHERE id = item.product_id;
-        END LOOP;
+            SET stock_quantity = stock_quantity + OLD.quantity - NEW.quantity
+            WHERE id = NEW.product_id;
+        END IF;
     END IF;
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
--- NEW: Trigger for invoice status change
-CREATE TRIGGER on_invoice_status_change
-AFTER UPDATE ON public.invoices
-FOR EACH ROW
-EXECUTE FUNCTION public.handle_invoice_status_change();
 
-
--- NEW: Function to return stock when a finalized INVOICE is DELETED.
-CREATE OR REPLACE FUNCTION public.return_stock_on_invoice_delete()
-RETURNS TRIGGER AS $$
-DECLARE
-    item RECORD;
-BEGIN
-    -- Only return stock if the deleted invoice was in a 'finalized' state
-    IF OLD.status IN ('sent', 'paid') THEN
-        FOR item IN SELECT product_id, quantity FROM public.invoice_items WHERE invoice_id = OLD.id LOOP
-            UPDATE public.products
-            SET stock_quantity = stock_quantity + item.quantity
-            WHERE id = item.product_id;
-        END LOOP;
-    END IF;
-    RETURN OLD;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
--- NEW: Trigger for invoice deletion
-CREATE TRIGGER on_invoice_delete
-BEFORE DELETE ON public.invoices
+-- NEW: Trigger for stock from sales, replacing the old status-based logic.
+CREATE TRIGGER on_sale_change
+AFTER INSERT OR UPDATE OR DELETE ON public.invoice_items
 FOR EACH ROW
-EXECUTE FUNCTION public.return_stock_on_invoice_delete();
+EXECUTE FUNCTION public.update_stock_on_sale();
 
 
 -- Function to get a combined, paginated report of sales and purchases.
@@ -301,7 +279,6 @@ BEGIN
         JOIN public.invoices i ON ii.invoice_id = i.id
         JOIN public.products p ON ii.product_id = p.id
         WHERE (p_transaction_type = 'all' OR p_transaction_type = 'sale')
-          AND i.status IN ('sent', 'paid') -- Only count sales from finalized invoices
           AND i.invoice_date BETWEEN p_start_date AND p_end_date
         UNION ALL
         SELECT pu.id, pu.purchase_date, 'Purchase' AS transaction_type, pu.reference_invoice, p.name, pu.quantity
@@ -327,7 +304,6 @@ BEGIN
         SELECT 1 FROM public.invoice_items ii
         JOIN public.invoices i ON ii.invoice_id = i.id
         WHERE (p_transaction_type = 'all' OR p_transaction_type = 'sale')
-          AND i.status IN ('sent', 'paid') -- Only count sales from finalized invoices
           AND i.invoice_date BETWEEN p_start_date AND p_end_date
         UNION ALL
         SELECT 1 FROM public.purchases pu
@@ -363,3 +339,124 @@ INSERT INTO public.categories (name, description, icon_name) VALUES
 ('Herbicides', 'Substances that are toxic to plants, used to destroy unwanted vegetation', 'Ban'),
 ('Bio-Pesticides', 'Pesticides derived from natural materials like animals, plants, bacteria', 'Trees')
 ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, icon_name = EXCLUDED.icon_name;
+
+-- 6. DEMO DATA (Optional, idempotent)
+-- This block inserts sample units, customers, products, purchases, and invoices.
+-- It's safe to run multiple times.
+
+INSERT INTO public.units (name, abbreviation) VALUES 
+('Pieces', 'PCS'),
+('Kilogram', 'KG'),
+('Litre', 'LTR'),
+('Bottle', 'BTL'),
+('Box', 'BOX'),
+('Gram', 'GM'),
+('Millilitre', 'ML')
+ON CONFLICT (name) DO NOTHING;
+
+DO $$
+DECLARE
+    -- Unit IDs
+    kg_unit_id uuid;
+    ltr_unit_id uuid;
+
+    -- Category IDs
+    chem_fertilizer_cat_id uuid;
+    insecticide_cat_id uuid;
+    fungicide_cat_id uuid;
+
+    -- Customer IDs
+    rohan_customer_id uuid;
+    priya_customer_id uuid;
+
+    -- Product IDs
+    urea_prod_id uuid;
+    dap_prod_id uuid;
+    cyper_prod_id uuid;
+    mancozeb_prod_id uuid;
+    
+    -- Invoice IDs
+    inv1_id uuid;
+    inv2_id uuid;
+
+BEGIN
+    -- Get Unit IDs
+    SELECT id INTO kg_unit_id FROM public.units WHERE name = 'Kilogram';
+    SELECT id INTO ltr_unit_id FROM public.units WHERE name = 'Litre';
+
+    -- Get Category IDs
+    SELECT id INTO chem_fertilizer_cat_id FROM public.categories WHERE name = 'Chemical Fertilizers (Urea, DAP, NPK)';
+    SELECT id INTO insecticide_cat_id FROM public.categories WHERE name = 'Insecticides';
+    SELECT id INTO fungicide_cat_id FROM public.categories WHERE name = 'Fungicides';
+
+    -- Insert Customers and capture IDs
+    INSERT INTO public.customers (name, phone, gstin, billing_address) VALUES ('Rohan Farm Supplies', '9876543210', '29ABCDE1234F1Z5', '123 Agri Lane, Market Road, Bengaluru') ON CONFLICT (name) DO NOTHING;
+    SELECT id INTO rohan_customer_id FROM public.customers WHERE name = 'Rohan Farm Supplies';
+
+    INSERT INTO public.customers (name, phone, gstin, billing_address) VALUES ('Priya Agro Store', '9123456780', '27FGHIJ5678K1Z9', '456 Kisan Chowk, Pune') ON CONFLICT (name) DO NOTHING;
+    SELECT id INTO priya_customer_id FROM public.customers WHERE name = 'Priya Agro Store';
+
+    -- Insert Products and capture IDs (stock_quantity starts at 0, will be updated by purchases)
+    IF kg_unit_id IS NOT NULL AND chem_fertilizer_cat_id IS NOT NULL THEN
+        INSERT INTO public.products (name, hsn_code, sku, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('Urea (46% N)', '31021000', 'FER-UREA-50KG', 350.00, 0.05, kg_unit_id, chem_fertilizer_cat_id, 0) ON CONFLICT (sku) DO NOTHING;
+    END IF;
+    SELECT id INTO urea_prod_id FROM public.products WHERE sku = 'FER-UREA-50KG';
+    
+    IF kg_unit_id IS NOT NULL AND chem_fertilizer_cat_id IS NOT NULL THEN
+        INSERT INTO public.products (name, hsn_code, sku, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('DAP (18-46-0)', '31053000', 'FER-DAP-50KG', 1200.00, 0.05, kg_unit_id, chem_fertilizer_cat_id, 0) ON CONFLICT (sku) DO NOTHING;
+    END IF;
+    SELECT id INTO dap_prod_id FROM public.products WHERE sku = 'FER-DAP-50KG';
+
+    IF ltr_unit_id IS NOT NULL AND insecticide_cat_id IS NOT NULL THEN
+        INSERT INTO public.products (name, hsn_code, sku, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('Cypermethrin 10% EC', '38089199', 'INS-CYPER-1LTR', 800.00, 0.18, ltr_unit_id, insecticide_cat_id, 0) ON CONFLICT (sku) DO NOTHING;
+    END IF;
+    SELECT id INTO cyper_prod_id FROM public.products WHERE sku = 'INS-CYPER-1LTR';
+
+    IF kg_unit_id IS NOT NULL AND fungicide_cat_id IS NOT NULL THEN
+        INSERT INTO public.products (name, hsn_code, sku, unit_price, tax_rate, unit_id, category_id, stock_quantity) VALUES ('Mancozeb 75% WP', '38089290', 'FUN-MANCO-1KG', 650.00, 0.18, kg_unit_id, fungicide_cat_id, 0) ON CONFLICT (sku) DO NOTHING;
+    END IF;
+    SELECT id INTO mancozeb_prod_id FROM public.products WHERE sku = 'FUN-MANCO-1KG';
+
+    -- To ensure idempotency, we clear previous demo transactions
+    DELETE FROM public.purchases WHERE reference_invoice IN ('PUR-2024-001', 'PUR-2024-002', 'PUR-2024-003');
+    DELETE FROM public.invoices WHERE invoice_number IN ('INV-2024-001', 'INV-2024-002');
+    
+    -- Insert Purchases (This will trigger stock updates)
+    IF urea_prod_id IS NOT NULL THEN
+      INSERT INTO public.purchases (product_id, purchase_date, reference_invoice, quantity) VALUES (urea_prod_id, CURRENT_DATE - INTERVAL '15 days', 'PUR-2024-001', 100);
+    END IF;
+    IF dap_prod_id IS NOT NULL THEN
+      INSERT INTO public.purchases (product_id, purchase_date, reference_invoice, quantity) VALUES (dap_prod_id, CURRENT_DATE - INTERVAL '14 days', 'PUR-2024-002', 50);
+    END IF;
+    IF cyper_prod_id IS NOT NULL THEN
+      INSERT INTO public.purchases (product_id, purchase_date, reference_invoice, quantity) VALUES (cyper_prod_id, CURRENT_DATE - INTERVAL '10 days', 'PUR-2024-003', 30);
+    END IF;
+    IF mancozeb_prod_id IS NOT NULL THEN
+      INSERT INTO public.purchases (product_id, purchase_date, reference_invoice, quantity) VALUES (mancozeb_prod_id, CURRENT_DATE - INTERVAL '10 days', 'PUR-2024-003', 40);
+    END IF;
+
+    -- Insert Invoices and capture IDs
+    IF rohan_customer_id IS NOT NULL THEN
+      INSERT INTO public.invoices (customer_id, invoice_number, invoice_date) VALUES (rohan_customer_id, 'INV-2024-001', CURRENT_DATE - INTERVAL '5 days') RETURNING id INTO inv1_id;
+    END IF;
+    
+    IF priya_customer_id IS NOT NULL THEN
+      INSERT INTO public.invoices (customer_id, invoice_number, invoice_date) VALUES (priya_customer_id, 'INV-2024-002', CURRENT_DATE - INTERVAL '2 days') RETURNING id INTO inv2_id;
+    END IF;
+
+    -- Insert Invoice Items (This will trigger stock updates and invoice total calculations)
+    IF inv1_id IS NOT NULL AND urea_prod_id IS NOT NULL THEN
+      INSERT INTO public.invoice_items (invoice_id, product_id, quantity, unit_price, tax_rate) VALUES (inv1_id, urea_prod_id, 10, 350.00, 0.05);
+    END IF;
+    IF inv1_id IS NOT NULL AND mancozeb_prod_id IS NOT NULL THEN
+      INSERT INTO public.invoice_items (invoice_id, product_id, quantity, unit_price, tax_rate) VALUES (inv1_id, mancozeb_prod_id, 5, 650.00, 0.18);
+    END IF;
+    
+    IF inv2_id IS NOT NULL AND dap_prod_id IS NOT NULL THEN
+      INSERT INTO public.invoice_items (invoice_id, product_id, quantity, unit_price, tax_rate) VALUES (inv2_id, dap_prod_id, 8, 1200.00, 0.05);
+    END IF;
+    IF inv2_id IS NOT NULL AND cyper_prod_id IS NOT NULL THEN
+      INSERT INTO public.invoice_items (invoice_id, product_id, quantity, unit_price, tax_rate) VALUES (inv2_id, cyper_prod_id, 2, 800.00, 0.18);
+    END IF;
+
+END $$;

@@ -1,4 +1,4 @@
-# GST Management System - Setup Guide
+# BIOTECHCENTRE - Setup Guide
 
 This document provides instructions to set up the Supabase backend and the local React development environment.
 
@@ -7,7 +7,7 @@ This document provides instructions to set up the Supabase backend and the local
 1.  **Create a Supabase Account:** If you don't have one, sign up at [supabase.com](https://supabase.com).
 2.  **Create a New Project:**
     *   Go to your Supabase dashboard and click "New project".
-    *   Give your project a name (e.g., `gst-management-system`).
+    *   Give your project a name (e.g., `biotechcentre-app`).
     *   Generate a secure database password and save it somewhere safe.
     *   Choose a region closest to your users.
     *   Click "Create new project". Wait for the project to be provisioned.
@@ -44,7 +44,7 @@ This document provides instructions to set up the Supabase backend and the local
 1.  **Clone the Repository:**
     ```bash
     git clone <repository_url>
-    cd gst-management-system
+    cd biotechcentre-app
     ```
 2.  **Install Dependencies:**
     ```bash

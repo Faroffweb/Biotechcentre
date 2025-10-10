@@ -81,8 +81,6 @@ export type PurchaseInsert = Omit<Purchase, 'id' | 'created_at'>;
 export type PurchaseUpdate = Partial<PurchaseInsert>;
 
 // For InvoicesPage.tsx
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
-
 export type InvoiceItem = Base & {
     invoice_id: string;
     product_id: string;
@@ -97,8 +95,8 @@ export type Invoice = Base & {
     customer_id: string | null;
     invoice_number: string;
     invoice_date: string;
+    notes: string | null;
     total_amount: number;
-    status: InvoiceStatus;
     customers?: Pick<Customer, 'name'>; // Optional relation
     invoice_items?: InvoiceItem[]; // Optional relation
 };

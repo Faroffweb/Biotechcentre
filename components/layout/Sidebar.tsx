@@ -21,12 +21,12 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const linkClasses = "flex items-center px-4 py-2.5 text-sm font-medium rounded-lg transition-colors";
   const activeLinkClasses = "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg";
-  const inactiveLinkClasses = "text-gray-600 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white";
+  const inactiveLinkClasses = "text-gray-600 hover:bg-gray-200 hover:text-gray-900";
 
   const SidebarContent = ({ isMobile }: { isMobile: boolean }) => (
     <>
-      <div className="flex items-center justify-center h-16 border-b dark:border-gray-700 shrink-0">
-        <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">GST Pro</span>
+      <div className="flex items-center justify-center h-16 border-b shrink-0">
+        <span className="text-xl font-bold text-gray-800">BIOTECHCENTRE</span>
       </div>
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         {navItems.map((item) => (
@@ -55,7 +55,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         aria-hidden="true"
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r bg-white dark:bg-gray-800 dark:border-gray-700 transform transition-transform md:hidden ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r bg-white transform transition-transform md:hidden ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -63,7 +63,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       </aside>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-64 flex-col border-r bg-white dark:bg-gray-800 dark:border-gray-700">
+      <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-64 flex-col border-r bg-white">
         <SidebarContent isMobile={false} />
       </aside>
     </>

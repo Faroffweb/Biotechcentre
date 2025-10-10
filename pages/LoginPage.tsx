@@ -31,16 +31,16 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Login to GST Pro</CardTitle>
+          <CardTitle className="text-2xl">Login to BIOTECHCENTRE</CardTitle>
           <CardDescription>Enter your email below to receive a magic link.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email Address</label>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email Address</label>
               <Input
                 id="email"
                 type="email"
@@ -53,7 +53,7 @@ const LoginPage: React.FC = () => {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Sending...' : 'Send Magic Link'}
             </Button>
-            {message && <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">{message}</p>}
+            {message && <p className="mt-4 text-center text-sm text-gray-600">{message}</p>}
           </form>
         </CardContent>
       </Card>

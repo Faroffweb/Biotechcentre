@@ -38,14 +38,15 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
       .panel { width:48%; border:1px solid #ddd; padding:10px; border-radius:6px; font-size: 0.9em; }
       .panel h3 { font-size: 1.1em; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;}
       .panel p { margin: 0; line-height: 1.6; }
-      table { width:100%; border-collapse:collapse; margin-bottom:20px; font-size: 0.85em; }
-      table th, table td { border:1px solid #ddd; padding:8px; text-align:left; }
+      table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+      table th, table td { border:1px solid #ddd; padding:6px; text-align:left; font-size:0.8em; }
       table th { background:#f9f9f9; font-weight: bold; }
       table td.number, table th.number { text-align: right; }
       .totals { max-width:300px; margin-left:auto; }
       .totals td { border:none; padding: 4px 8px; }
       .footer { border-top:1px solid #ddd; margin-top:20px; padding-top:10px; font-size: 0.9em; }
       .footer h3 { font-size: 1.1em; margin-bottom: 10px; }
+      .notes { margin-bottom:20px; font-size: 0.9em; }
       .signatures { display:flex; justify-content:space-between; margin-top:60px; }
       .sign-box { width:40%; text-align:center; }
       .sign-line { border-top:1px solid #000; margin-top:60px; }
@@ -62,7 +63,8 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
                     <div className="invoice-meta">
                         <h2>Invoice</h2>
                         <p><strong>No:</strong> {invoice.invoice_number}<br />
-                        <strong>Date:</strong> {formatDate(invoice.invoice_date)}</p>
+                        <strong>Date:</strong> {formatDate(invoice.invoice_date)}
+                        </p>
                     </div>
                 </div>
 
@@ -90,7 +92,8 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
                             <th>HSN/SAC</th>
                             <th className="number">Qty</th>
                             <th>Unit</th>
-                            <th className="number">Taxable Amount</th>
+                            <th className="number">Rate</th>
+                            <th className="number">Taxable Value</th>
                             <th className="number">GST %</th>
                             <th className="number">CGST</th>
                             <th className="number">SGST</th>
@@ -103,6 +106,7 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
                             const itemTotalCGST = itemTaxableAmount * item.tax_rate / 2;
                             const itemTotalSGST = itemTaxableAmount * item.tax_rate / 2;
                             const itemTotal = itemTaxableAmount + itemTotalCGST + itemTotalSGST;
+                            const inclusiveRate = item.unit_price * (1 + item.tax_rate);
                             
                             return (
                                 <tr key={item.id}>
@@ -110,6 +114,7 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
                                     <td>{item.products?.hsn_code || 'N/A'}</td>
                                     <td className="number">{item.quantity}</td>
                                     <td>{item.products?.units?.abbreviation || 'N/A'}</td>
+                                    <td className="number">{formatCurrency(inclusiveRate)}</td>
                                     <td className="number">{formatCurrency(itemTaxableAmount)}</td>
                                     <td className="number">{(item.tax_rate * 100).toFixed(2)}%</td>
                                     <td className="number">{formatCurrency(itemTotalCGST)}</td>
@@ -123,7 +128,7 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
 
                 <table className="totals">
                     <tbody>
-                        <tr><td>Taxable Amount:</td><td className="number">{formatCurrency(taxableAmount)}</td></tr>
+                        <tr><td>Taxable Value:</td><td className="number">{formatCurrency(taxableAmount)}</td></tr>
                         <tr><td>CGST:</td><td className="number">{formatCurrency(totalCGST)}</td></tr>
                         <tr><td>SGST:</td><td className="number">{formatCurrency(totalSGST)}</td></tr>
                         <tr><td><strong>Total (INR):</strong></td><td className="number"><strong>{formatCurrency(grandTotal)}</strong></td></tr>
@@ -131,6 +136,13 @@ const InvoiceTemplate = React.forwardRef<HTMLDivElement, InvoiceTemplateProps>((
                 </table>
 
                 <div className="footer">
+                    {invoice.notes && (
+                        <div className="notes">
+                            <h3>Notes</h3>
+                            <p>{invoice.notes}</p>
+                        </div>
+                    )}
+
                     <h3>Bank Details</h3>
                     <p><strong>Account Name:</strong> {companyDetails?.account_name || 'N/A'}<br />
                     <strong>Account Number:</strong> {companyDetails?.account_number || 'N/A'}<br />

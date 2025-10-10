@@ -6,9 +6,11 @@ import * as icons from 'lucide-react';
 // we tell TypeScript to bypass its strict check, asserting that we will handle the types correctly at runtime.
 const IconLibrary = icons as unknown as { [key: string]: React.FC<icons.LucideProps> };
 
-interface DynamicIconProps extends icons.LucideProps {
+// FIX: Changed props definition to correctly inherit all SVG props, including className.
+// `React.ComponentProps` is used to reliably extract the props type from an actual icon component.
+type DynamicIconProps = React.ComponentProps<typeof icons.Package> & {
   name: string | null | undefined;
-}
+};
 
 const DynamicIcon: React.FC<DynamicIconProps> = ({ name, ...props }) => {
   if (!name) {

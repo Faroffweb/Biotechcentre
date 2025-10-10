@@ -89,7 +89,7 @@ const DashboardPage: React.FC = () => {
           <StatCardSkeleton />
           <StatCardSkeleton />
         </div>
-        <Card className="bg-gradient-to-b from-white to-slate-50 dark:from-gray-800 dark:to-gray-900/50">
+        <Card className="bg-gradient-to-b from-white to-slate-50">
           <CardHeader><CardTitle>Sales Overview</CardTitle></CardHeader>
           <CardContent>
             <div className="h-80 flex items-center justify-center">
@@ -169,7 +169,7 @@ const DashboardPage: React.FC = () => {
         </Card>
       </div>
 
-      <Card className="bg-gradient-to-b from-white to-slate-50 dark:from-gray-800 dark:to-gray-900/50">
+      <Card className="bg-gradient-to-b from-white to-slate-50">
         <CardHeader>
           <CardTitle>Sales Overview (Last 6 Months)</CardTitle>
         </CardHeader>

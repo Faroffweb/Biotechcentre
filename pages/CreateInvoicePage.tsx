@@ -17,7 +17,11 @@ type FullInvoice = Invoice & {
 const fetchInvoiceWithItems = async (invoiceId: string): Promise<FullInvoice> => {
   const { data, error } = await supabase
     .from('invoices')
-    .select(`*, customers(*), invoice_items(*, products(name, hsn_code, unit_price, tax_rate, units(abbreviation)))`)
+    .select(`
+        id, created_at, customer_id, invoice_number, invoice_date, notes, total_amount,
+        customers(*),
+        invoice_items(*, products(name, hsn_code, unit_price, tax_rate, units(abbreviation)))
+    `)
     .eq('id', invoiceId)
     .single();
 
