@@ -10,7 +10,7 @@ import { Trash2 } from 'lucide-react';
 import { formatCurrency } from '../hooks/lib/utils';
 
 type FullInvoice = Invoice & {
-    customers: Pick<Customer, 'name' | 'billing_address' | 'gstin' | 'phone'> | null;
+    customers: Pick<Customer, 'name' | 'billing_address' | 'gst_pan' | 'phone'> | null;
     invoice_items: (InvoiceItem & { products: { name: string; hsn_code: string | null; units?: Pick<Unit, 'abbreviation'> | null; } | null })[];
 };
 
@@ -36,7 +36,7 @@ type FormValues = {
   }[];
   new_customer_name?: string;
   new_customer_phone?: string;
-  new_customer_gstin?: string;
+  new_customer_gst_pan?: string;
   new_customer_billing_address?: string;
 };
 
@@ -65,7 +65,7 @@ const fetchLastInvoiceNumber = async (): Promise<string | null> => {
   return data?.invoice_number || null;
 };
 
-const upsertInvoice = async ({ formData, id }: { formData: Omit<FormValues, 'new_customer_name' | 'new_customer_phone' | 'new_customer_gstin' | 'new_customer_billing_address' | 'customer_name_display'>, id?: string }) => {
+const upsertInvoice = async ({ formData, id }: { formData: Omit<FormValues, 'new_customer_name' | 'new_customer_phone' | 'new_customer_gst_pan' | 'new_customer_billing_address' | 'customer_name_display'>, id?: string }) => {
     const invoiceData = {
         customer_id: formData.customer_id,
         invoice_date: formData.invoice_date,
@@ -258,7 +258,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
         finalCustomerId = matchingCustomer.id;
     } else if (customerMode === 'new') {
         if (!data.new_customer_name) { toast('New customer name is required.'); return; }
-        const { data: createdCustomer, error } = await supabase.from('customers').insert({ name: data.new_customer_name, phone: data.new_customer_phone || null, gstin: data.new_customer_gstin || null, billing_address: data.new_customer_billing_address || null, email: null, is_guest: false }).select('id').single();
+        const { data: createdCustomer, error } = await supabase.from('customers').insert({ name: data.new_customer_name, phone: data.new_customer_phone || null, gst_pan: data.new_customer_gst_pan || null, billing_address: data.new_customer_billing_address || null, email: null, is_guest: false }).select('id').single();
         if (error) { toast(`Error creating customer: ${error.message}`); return; }
         finalCustomerId = createdCustomer.id;
     } else if (customerMode === 'guest') {
@@ -305,14 +305,14 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({ invoice, onSuccess, onCancel 
                         <div><label htmlFor="new_customer_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label><Input id="new_customer_name" {...register('new_customer_name', { required: customerMode === 'new' ? 'Customer name is required.' : false })} />{errors.new_customer_name && <p className="mt-1 text-sm text-red-500">{errors.new_customer_name.message}</p>}</div>
                         <div><label htmlFor="new_customer_phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Phone</label><Input id="new_customer_phone" {...register('new_customer_phone')} /></div>
                         <div>
-                           <label htmlFor="new_customer_gstin" className="block text-sm font-medium text-gray-700 dark:text-gray-300">GSTIN</label>
-                           <Input id="new_customer_gstin" {...register('new_customer_gstin', {
+                           <label htmlFor="new_customer_gst_pan" className="block text-sm font-medium text-gray-700 dark:text-gray-300">GSTIN / PAN</label>
+                           <Input id="new_customer_gst_pan" {...register('new_customer_gst_pan', {
                                 pattern: {
-                                    value: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i,
-                                    message: "Invalid GSTIN format."
+                                    value: /^$|^([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1})$|^([A-Z]{5}[0-9]{4}[A-Z]{1})$/i,
+                                    message: "Invalid GSTIN or PAN format."
                                 }
                            })} />
-                           {errors.new_customer_gstin && <p className="mt-1 text-sm text-red-500">{errors.new_customer_gstin.message}</p>}
+                           {errors.new_customer_gst_pan && <p className="mt-1 text-sm text-red-500">{errors.new_customer_gst_pan.message}</p>}
                         </div>
                         <div className="md:col-span-2"><label htmlFor="new_customer_billing_address" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Billing Address</label><textarea id="new_customer_billing_address" rows={2} className="flex w-full rounded-md border border-slate-300 bg-transparent py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 dark:border-slate-700" {...register('new_customer_billing_address')} /></div>
                     </div>

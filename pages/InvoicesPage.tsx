@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
 import { PlusCircle, Pencil, Trash2, Download, Search, Eye } from 'lucide-react';
-import { formatDate, formatCurrency } from '../hooks/lib/utils';
+import { formatDate, formatCurrency, formatNumber } from '../hooks/lib/utils';
 import Pagination from '../components/ui/Pagination';
 import Dialog from '../components/ui/Dialog';
 import InvoiceTemplate from '../components/InvoiceTemplate';
@@ -21,7 +21,7 @@ import autoTable from 'jspdf-autotable';
 const ITEMS_PER_PAGE = 10;
 
 type FullInvoice = Invoice & {
-    customers: Pick<Customer, 'name' | 'billing_address' | 'gstin' | 'phone'> | null;
+    customers: Pick<Customer, 'name' | 'billing_address' | 'gst_pan' | 'phone'> | null;
     invoice_items: (InvoiceItem & { products: { name: string; hsn_code: string | null; units?: Pick<Unit, 'abbreviation'> | null } | null })[];
 };
 
@@ -39,7 +39,7 @@ const fetchInvoices = async (page: number, searchTerm: string): Promise<{ data: 
   }
     
   const { data, error, count } = await query
-    .order('invoice_date', { ascending: false })
+    .order('created_at', { ascending: false })
     .range(from, to);
     
   if (error) throw new Error(error.message);
@@ -156,12 +156,22 @@ const InvoicesPage: React.FC = () => {
     let finalY = 0; // Track the final Y position after the table
 
     // --- Header ---
+    let yPos = 22;
     doc.setFontSize(20);
-    doc.text(company.name || 'Company Name', 14, 22);
+    doc.text(company.name || 'Company Name', 14, yPos);
+
+    if (company.slogan) {
+        yPos += 6;
+        doc.setFontSize(10).setTextColor(100);
+        doc.text(company.slogan, 14, yPos);
+        doc.setTextColor(0);
+    }
+    
+    yPos += 8;
     doc.setFontSize(10);
-    doc.text(company.address || '', 14, 30);
-    doc.text(`GSTIN: ${company.gstin || 'N/A'}`, 14, 35);
-    doc.text(`PAN: ${company.pan || 'N/A'}`, 14, 40);
+    doc.text(company.address || '', 14, yPos);
+    yPos += 5;
+    doc.text(`GSTIN: ${company.gstin || 'N/A'}`, 14, yPos);
 
     doc.setFontSize(16);
     doc.text('Tax Invoice', 200, 22, { align: 'right' });
@@ -169,39 +179,45 @@ const InvoicesPage: React.FC = () => {
     doc.text(`Invoice No: ${invoice.invoice_number}`, 200, 30, { align: 'right' });
     doc.text(`Date: ${formatDate(invoice.invoice_date)}`, 200, 35, { align: 'right' });
 
+    const lineY = yPos + 5;
     doc.setLineWidth(0.5);
-    doc.line(14, 45, 200, 45);
+    doc.line(14, lineY, 200, lineY);
+
 
     // --- Billed To Section ---
+    const billedToY = lineY + 10;
     doc.setFontSize(10).setFont('helvetica', 'bold');
-    doc.text('Billed To:', 14, 55);
+    doc.text('Billed To:', 14, billedToY);
     doc.setFont('helvetica', 'normal');
-    doc.text(invoice.customers?.name || 'Guest Customer', 14, 60);
+    doc.text(invoice.customers?.name || 'Guest Customer', 14, billedToY + 5);
     const addressLines = doc.splitTextToSize(invoice.customers?.billing_address || 'N/A', 80);
-    doc.text(addressLines, 14, 65);
+    doc.text(addressLines, 14, billedToY + 10);
     const addressHeight = addressLines.length * 5;
-    doc.text(`GSTIN: ${invoice.customers?.gstin || 'N/A'}`, 14, 65 + addressHeight);
-    doc.text(`Phone: ${invoice.customers?.phone || 'N/A'}`, 14, 70 + addressHeight);
+    doc.text(`GSTIN / PAN: ${invoice.customers?.gst_pan || 'N/A'}`, 14, billedToY + 10 + addressHeight);
+    doc.text(`Phone: ${invoice.customers?.phone || 'N/A'}`, 14, billedToY + 15 + addressHeight);
 
     // --- Items Table ---
+    const tableStartY = billedToY + 25 + addressHeight;
     const tableData = invoice.invoice_items.map((item, index) => {
         const taxableAmount = item.quantity * item.unit_price;
+        const inclusiveRate = item.unit_price * (1 + item.tax_rate);
         const total = taxableAmount * (1 + item.tax_rate);
         return [
             index + 1,
             item.products?.name || 'N/A',
             item.products?.hsn_code || 'N/A',
             item.quantity,
-            formatCurrency(item.unit_price),
-            formatCurrency(taxableAmount),
+            item.products?.units?.abbreviation || 'N/A',
+            formatNumber(inclusiveRate),
+            formatNumber(taxableAmount),
             `${(item.tax_rate * 100).toFixed(0)}%`,
-            formatCurrency(total),
+            formatNumber(total),
         ];
     });
 
     autoTable(doc, {
-        startY: 80 + addressHeight,
-        head: [['#', 'Item', 'HSN', 'Qty', 'Rate', 'Taxable', 'GST', 'Total']],
+        startY: tableStartY,
+        head: [['#', 'Item', 'HSN', 'Qty', 'Unit', 'Rate', 'Taxable', 'GST', 'Total']],
         body: tableData,
         theme: 'grid',
         headStyles: { fillColor: [230, 230, 230], textColor: 20 },
@@ -218,10 +234,10 @@ const InvoicesPage: React.FC = () => {
     autoTable(doc, {
         startY: totalsY,
         body: [
-            ['Subtotal', formatCurrency(taxableTotal)],
-            ['CGST', formatCurrency(taxTotal / 2)],
-            ['SGST', formatCurrency(taxTotal / 2)],
-            [{ content: 'Grand Total', styles: { fontStyle: 'bold' } }, { content: formatCurrency(invoice.total_amount), styles: { fontStyle: 'bold' } }],
+            ['Subtotal', formatNumber(taxableTotal)],
+            ['CGST', formatNumber(taxTotal / 2)],
+            ['SGST', formatNumber(taxTotal / 2)],
+            [{ content: 'Grand Total', styles: { fontStyle: 'bold' } }, { content: formatNumber(invoice.total_amount), styles: { fontStyle: 'bold' } }],
         ],
         theme: 'plain',
         tableWidth: 80,
@@ -230,8 +246,13 @@ const InvoicesPage: React.FC = () => {
     
     finalY = (doc as any).lastAutoTable.finalY;
 
+    // --- Separator Line ---
+    const separatorY = finalY + 8;
+    doc.setLineWidth(0.2);
+    doc.line(14, separatorY, 200, separatorY);
+
     // --- Notes & Bank Details ---
-    let notesY = finalY + 15;
+    let notesY = separatorY + 8;
     if (invoice.notes) {
       doc.setFont('helvetica', 'bold').text('Notes:', 14, notesY);
       doc.setFont('helvetica', 'normal');
@@ -246,6 +267,19 @@ const InvoicesPage: React.FC = () => {
     doc.text(`Account No: ${company.account_number || 'N/A'}`, 14, notesY + 10);
     doc.text(`Bank: ${company.bank_name || 'N/A'}`, 14, notesY + 15);
     doc.text(`IFSC: ${company.ifsc_code || 'N/A'}`, 14, notesY + 20);
+
+    // Check if there is enough space for the signature
+    let signatureYPos = notesY + 50;
+    if (signatureYPos > pageHeight - 40) {
+        doc.addPage();
+        signatureYPos = 40; // Position at top of new page
+    }
+    
+    // --- Signature ---
+    doc.setLineWidth(0.2);
+    doc.line(130, signatureYPos, 200, signatureYPos); // Line on the right side
+    doc.setFontSize(10).setTextColor(0);
+    doc.text('Authorized Signatory', 165, signatureYPos + 5, { align: 'center' });
 
     // --- Footer ---
     doc.setFontSize(8).setTextColor(150);
@@ -270,30 +304,80 @@ const InvoicesPage: React.FC = () => {
         let finalY = 0;
 
         // PDF Generation Logic (same as download)
-        doc.setFontSize(20).text(company.name || 'Company Name', 14, 22);
-        doc.setFontSize(10).text(company.address || '', 14, 30);
-        doc.text(`GSTIN: ${company.gstin || 'N/A'}`, 14, 35).text(`PAN: ${company.pan || 'N/A'}`, 14, 40);
+        let yPos = 22;
+        doc.setFontSize(20).text(company.name || 'Company Name', 14, yPos);
+        if (company.slogan) {
+            yPos += 6;
+            doc.setFontSize(10).setTextColor(100).text(company.slogan, 14, yPos);
+            doc.setTextColor(0);
+        }
+        yPos += 8;
+        doc.setFontSize(10).text(company.address || '', 14, yPos);
+        yPos += 5;
+        doc.text(`GSTIN: ${company.gstin || 'N/A'}`, 14, yPos);
+
         doc.setFontSize(16).text('Tax Invoice', 200, 22, { align: 'right' });
         doc.setFontSize(10).text(`Invoice No: ${invoice.invoice_number}`, 200, 30, { align: 'right' }).text(`Date: ${formatDate(invoice.invoice_date)}`, 200, 35, { align: 'right' });
-        doc.setLineWidth(0.5).line(14, 45, 200, 45);
-        doc.setFont('helvetica', 'bold').text('Billed To:', 14, 55);
-        doc.setFont('helvetica', 'normal').text(invoice.customers?.name || 'Guest Customer', 14, 60);
+        
+        const lineY = yPos + 5;
+        doc.setLineWidth(0.5).line(14, lineY, 200, lineY);
+        
+        const billedToY = lineY + 10;
+        doc.setFont('helvetica', 'bold').text('Billed To:', 14, billedToY);
+        doc.setFont('helvetica', 'normal').text(invoice.customers?.name || 'Guest Customer', 14, billedToY + 5);
         const addressLines = doc.splitTextToSize(invoice.customers?.billing_address || 'N/A', 80);
-        doc.text(addressLines, 14, 65);
+        doc.text(addressLines, 14, billedToY + 10);
         const addressHeight = addressLines.length * 5;
-        doc.text(`GSTIN: ${invoice.customers?.gstin || 'N/A'}`, 14, 65 + addressHeight);
-        doc.text(`Phone: ${invoice.customers?.phone || 'N/A'}`, 14, 70 + addressHeight);
+        doc.text(`GSTIN / PAN: ${invoice.customers?.gst_pan || 'N/A'}`, 14, billedToY + 10 + addressHeight);
+        doc.text(`Phone: ${invoice.customers?.phone || 'N/A'}`, 14, billedToY + 15 + addressHeight);
+        
+        const tableStartY = billedToY + 25 + addressHeight;
         const tableData = invoice.invoice_items.map((item, index) => {
             const taxableAmount = item.quantity * item.unit_price;
+            const inclusiveRate = item.unit_price * (1 + item.tax_rate);
             const total = taxableAmount * (1 + item.tax_rate);
-            return [index + 1, item.products?.name || 'N/A', item.products?.hsn_code || 'N/A', item.quantity, formatCurrency(item.unit_price), formatCurrency(taxableAmount), `${(item.tax_rate * 100).toFixed(0)}%`, formatCurrency(total)];
+            return [index + 1, item.products?.name || 'N/A', item.products?.hsn_code || 'N/A', item.quantity, item.products?.units?.abbreviation || 'N/A', formatNumber(inclusiveRate), formatNumber(taxableAmount), `${(item.tax_rate * 100).toFixed(0)}%`, formatNumber(total)];
         });
-        autoTable(doc, { startY: 80 + addressHeight, head: [['#', 'Item', 'HSN', 'Qty', 'Rate', 'Taxable', 'GST', 'Total']], body: tableData, theme: 'grid', headStyles: { fillColor: [230, 230, 230], textColor: 20 }, didDrawPage: (data) => { finalY = data.cursor?.y || 0; }});
+        autoTable(doc, { startY: tableStartY, head: [['#', 'Item', 'HSN', 'Qty', 'Unit', 'Rate', 'Taxable', 'GST', 'Total']], body: tableData, theme: 'grid', headStyles: { fillColor: [230, 230, 230], textColor: 20 }, didDrawPage: (data) => { finalY = data.cursor?.y || 0; }});
+        
         const taxableTotal = invoice.invoice_items.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0);
         const taxTotal = invoice.total_amount - taxableTotal;
         const totalsY = finalY + 10 > pageHeight - 50 ? 20 : finalY + 10;
-        autoTable(doc, { startY: totalsY, body: [['Subtotal', formatCurrency(taxableTotal)], ['CGST', formatCurrency(taxTotal / 2)], ['SGST', formatCurrency(taxTotal / 2)], [{ content: 'Grand Total', styles: { fontStyle: 'bold' } }, { content: formatCurrency(invoice.total_amount), styles: { fontStyle: 'bold' } }]], theme: 'plain', tableWidth: 80, margin: { left: 115 } });
+        autoTable(doc, { startY: totalsY, body: [['Subtotal', formatNumber(taxableTotal)], ['CGST', formatNumber(taxTotal / 2)], ['SGST', formatNumber(taxTotal / 2)], [{ content: 'Grand Total', styles: { fontStyle: 'bold' } }, { content: formatNumber(invoice.total_amount), styles: { fontStyle: 'bold' } }]], theme: 'plain', tableWidth: 80, margin: { left: 115 } });
         finalY = (doc as any).lastAutoTable.finalY;
+        
+        // --- Separator Line ---
+        const separatorY = finalY + 8;
+        doc.setLineWidth(0.2);
+        doc.line(14, separatorY, 200, separatorY);
+
+        let notesY = separatorY + 8;
+        if (invoice.notes) {
+            doc.setFont('helvetica', 'bold').text('Notes:', 14, notesY);
+            doc.setFont('helvetica', 'normal');
+            const notesLines = doc.splitTextToSize(invoice.notes, 180);
+            doc.text(notesLines, 14, notesY + 5);
+            notesY += notesLines.length * 5 + 5;
+        }
+
+        doc.setFont('helvetica', 'bold').text('Bank Details:', 14, notesY);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Account Name: ${company.account_name || 'N/A'}`, 14, notesY + 5);
+        doc.text(`Account No: ${company.account_number || 'N/A'}`, 14, notesY + 10);
+        doc.text(`Bank: ${company.bank_name || 'N/A'}`, 14, notesY + 15);
+        doc.text(`IFSC: ${company.ifsc_code || 'N/A'}`, 14, notesY + 20);
+
+        let signatureYPos = notesY + 50;
+        if (signatureYPos > pageHeight - 40) {
+            doc.addPage();
+            signatureYPos = 40;
+        }
+        
+        doc.setLineWidth(0.2);
+        doc.line(130, signatureYPos, 200, signatureYPos);
+        doc.setFontSize(10).setTextColor(0);
+        doc.text('Authorized Signatory', 165, signatureYPos + 5, { align: 'center' });
+
         doc.setFontSize(8).setTextColor(150).text('This is a computer-generated invoice.', 105, pageHeight - 10, { align: 'center' });
 
         const pdfBlob = doc.output('blob');

@@ -9,9 +9,9 @@ export type CompanyDetails = {
   id: number;
   created_at: string;
   name: string | null;
+  slogan: string | null;
   address: string | null;
   gstin: string | null;
-  pan: string | null;
   account_name: string | null;
   account_number: string | null;
   account_type: string | null;
@@ -60,7 +60,7 @@ export type Customer = Base & {
   name: string;
   email: string | null;
   phone: string | null;
-  gstin: string | null;
+  gst_pan: string | null;
   billing_address: string | null;
   is_guest: boolean;
 };

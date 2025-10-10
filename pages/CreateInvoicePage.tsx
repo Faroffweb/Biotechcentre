@@ -10,7 +10,7 @@ import { ArrowLeft } from 'lucide-react';
 
 // This type definition should match the one in InvoicesPage.tsx for prop compatibility
 type FullInvoice = Invoice & {
-    customers: Pick<Customer, 'name' | 'billing_address' | 'gstin' | 'phone'> | null;
+    customers: Pick<Customer, 'name' | 'billing_address' | 'gst_pan' | 'phone'> | null;
     invoice_items: (InvoiceItem & { products: { name: string; hsn_code: string | null; units?: Pick<Unit, 'abbreviation'> | null; } | null })[];
 };
 

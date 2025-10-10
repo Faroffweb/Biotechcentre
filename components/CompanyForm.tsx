@@ -63,7 +63,11 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ companyDetails }) => {
                         <Input id="name" {...register('name', { required: "Company name is required" })} />
                         {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>}
                     </div>
-                    <div>
+                     <div>
+                        <label htmlFor="slogan" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Slogan (Optional)</label>
+                        <Input id="slogan" {...register('slogan')} />
+                    </div>
+                    <div className="md:col-span-2">
                         <label htmlFor="gstin" className="block text-sm font-medium text-gray-700 dark:text-gray-300">GSTIN</label>
                         <Input id="gstin" {...register('gstin', {
                             pattern: {
@@ -72,10 +76,6 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ companyDetails }) => {
                             }
                         })} />
                         {errors.gstin && <p className="mt-1 text-sm text-red-500">{errors.gstin.message}</p>}
-                    </div>
-                    <div>
-                        <label htmlFor="pan" className="block text-sm font-medium text-gray-700 dark:text-gray-300">PAN</label>
-                        <Input id="pan" {...register('pan')} />
                     </div>
                      <div className="md:col-span-2">
                         <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Address</label>

@@ -38,7 +38,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onSuccess, onCanc
     defaultValues: {
       name: '',
       phone: '',
-      gstin: '',
+      gst_pan: '',
       billing_address: '',
       is_guest: false,
     },
@@ -48,7 +48,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onSuccess, onCanc
     reset(customer || {
       name: '',
       phone: '',
-      gstin: '',
+      gst_pan: '',
       billing_address: '',
       is_guest: false,
     });
@@ -86,14 +86,14 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onSuccess, onCanc
       </div>
 
       <div>
-        <label htmlFor="gstin" className="block text-sm font-medium text-gray-700 dark:text-gray-300">GSTIN</label>
-        <Input id="gstin" {...register('gstin', {
+        <label htmlFor="gst_pan" className="block text-sm font-medium text-gray-700 dark:text-gray-300">GSTIN / PAN</label>
+        <Input id="gst_pan" {...register('gst_pan', {
             pattern: {
-                value: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i,
-                message: "Invalid GSTIN format."
+                value: /^$|^([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1})$|^([A-Z]{5}[0-9]{4}[A-Z]{1})$/i,
+                message: "Invalid GSTIN or PAN format."
             }
         })} />
-        {errors.gstin && <p className="mt-1 text-sm text-red-500">{errors.gstin.message}</p>}
+        {errors.gst_pan && <p className="mt-1 text-sm text-red-500">{errors.gst_pan.message}</p>}
       </div>
 
       <div>

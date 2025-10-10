@@ -105,7 +105,7 @@ const CustomersPage: React.FC = () => {
             <TableHead>Name</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Phone</TableHead>
-            <TableHead>GSTIN</TableHead>
+            <TableHead>GSTIN / PAN</TableHead>
             <TableHead className="text-center">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -164,7 +164,7 @@ const CustomersPage: React.FC = () => {
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Phone</TableHead>
-                      <TableHead>GSTIN</TableHead>
+                      <TableHead>GSTIN / PAN</TableHead>
                       <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -174,7 +174,7 @@ const CustomersPage: React.FC = () => {
                         <TableCell data-label="Name" className="font-medium">{customer.name}</TableCell>
                         <TableCell data-label="Email">{customer.email || 'N/A'}</TableCell>
                         <TableCell data-label="Phone">{customer.phone || 'N/A'}</TableCell>
-                        <TableCell data-label="GSTIN">{customer.gstin || 'N/A'}</TableCell>
+                        <TableCell data-label="GSTIN / PAN">{customer.gst_pan || 'N/A'}</TableCell>
                         <TableCell data-label="Actions">
                           <div className="flex items-center justify-center space-x-2 md:justify-center">
                             <Button variant="ghost" size="icon" onClick={() => handleEditClick(customer)} aria-label="Edit Customer">

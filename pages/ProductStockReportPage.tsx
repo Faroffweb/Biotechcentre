@@ -3,34 +3,32 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../hooks/lib/supabase';
 import { Product, Purchase, ProductSaleItem, Unit, CompanyDetails } from '../types';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
 import Pagination from '../components/ui/Pagination';
 import Skeleton from '../components/ui/Skeleton';
 import { ArrowLeft, Download } from 'lucide-react';
 import { formatDate } from '../hooks/lib/utils';
-import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
 import { toast } from '../components/ui/Toaster';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 20;
 
 type ProductDetails = Pick<Product, 'name' | 'sku' | 'stock_quantity'> & {
     units: Pick<Unit, 'abbreviation'> | null;
 };
 
-// Represents a single movement in stock, with running totals
+// Represents a single day's stock movement summary
 type StockMovement = {
     date: string;
-    createdAt: string;
-    type: 'Purchase' | 'Sale';
-    quantity: number;
-    quantityChange: number;
-    reference: string;
-    id: string;
+    invoice: string;
     openingStock: number;
+    purchase: number;
+    total: number;
+    sale: number;
     closingStock: number;
 };
 
@@ -45,7 +43,6 @@ const fetchProductDetails = async (productId: string): Promise<ProductDetails> =
     return data as ProductDetails;
 };
 
-// Fetch ALL purchases for a product, not paginated
 const fetchAllProductPurchases = async (productId: string): Promise<Purchase[]> => {
     const { data, error } = await supabase
         .from('purchases')
@@ -55,7 +52,6 @@ const fetchAllProductPurchases = async (productId: string): Promise<Purchase[]> 
     return data || [];
 };
 
-// Fetch ALL sales for a product, not paginated
 const fetchAllProductSales = async (productId: string): Promise<ProductSaleItem[]> => {
     const { data, error } = await supabase
         .from('invoice_items')
@@ -75,12 +71,20 @@ const fetchCompanyDetails = async (): Promise<CompanyDetails | null> => {
     return data;
 };
 
+const getFormattedDate = (date: Date) => date.toISOString().split('T')[0];
 
 const ProductStockReportPage: React.FC = () => {
     const { productId } = useParams<{ productId: string }>();
     const navigate = useNavigate();
     const [currentPage, setCurrentPage] = useState(1);
     const [isExporting, setIsExporting] = useState(false);
+    
+    const [startDate, setStartDate] = useState<string>(() => {
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        return getFormattedDate(firstDay);
+    });
+    const [endDate, setEndDate] = useState<string>(() => getFormattedDate(new Date()));
 
     if (!productId) {
         return <p className="text-red-500">Product ID is missing.</p>;
@@ -109,45 +113,90 @@ const ProductStockReportPage: React.FC = () => {
     const stockMovements = useMemo(() => {
         if (!purchases || !sales || !product) return [];
 
-        const purchaseMovements = purchases.map(p => ({
-            id: `p-${p.id}`,
-            date: p.purchase_date,
-            createdAt: p.created_at,
-            type: 'Purchase' as 'Purchase' | 'Sale',
-            quantity: p.quantity,
-            quantityChange: p.quantity,
-            reference: p.reference_invoice || 'N/A',
-        }));
+        const filterStartDate = startDate ? new Date(startDate) : null;
+        if (filterStartDate) filterStartDate.setHours(0, 0, 0, 0);
 
-        const salesMovements = sales.map(s => ({
-            id: `s-${s.id}`,
-            date: s.invoices?.invoice_date || '',
-            createdAt: s.created_at,
-            type: 'Sale' as 'Purchase' | 'Sale',
-            quantity: s.quantity,
-            quantityChange: -s.quantity,
-            reference: s.invoices?.invoice_number || 'N/A',
-        }));
+        const filterEndDate = endDate ? new Date(endDate) : null;
+        if (filterEndDate) filterEndDate.setHours(23, 59, 59, 999);
 
-        const sortedMovements = [...purchaseMovements, ...salesMovements]
-            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        
-        // Calculate initial stock before any transactions
-        const totalChange = sortedMovements.reduce((acc, mov) => acc + mov.quantityChange, 0);
-        const initialOpeningStock = product.stock_quantity - totalChange;
+        const totalPurchasesEver = purchases.reduce((acc, p) => acc + p.quantity, 0);
+        const totalSalesEver = sales.reduce((acc, s) => acc + s.quantity, 0);
+        const absoluteInitialStock = product.stock_quantity - (totalPurchasesEver - totalSalesEver);
 
-        // Calculate running totals going forward in time
-        let lastClosingStock = initialOpeningStock;
-        const movementsWithTotals = sortedMovements.map(movement => {
-            const openingStock = lastClosingStock;
-            const closingStock = openingStock + movement.quantityChange;
-            lastClosingStock = closingStock;
-            return { ...movement, openingStock, closingStock };
+        let openingStockForPeriod = absoluteInitialStock;
+        if (filterStartDate) {
+            const purchasesBefore = purchases
+                .filter(p => new Date(p.purchase_date) < filterStartDate)
+                .reduce((acc, p) => acc + p.quantity, 0);
+            const salesBefore = sales
+                .filter(s => s.invoices?.invoice_date && new Date(s.invoices.invoice_date) < filterStartDate)
+                .reduce((acc, s) => acc + s.quantity, 0);
+            openingStockForPeriod += (purchasesBefore - salesBefore);
+        }
+
+        const filteredPurchases = purchases.filter(p => {
+            const pDate = new Date(p.purchase_date);
+            const startMatch = !filterStartDate || pDate >= filterStartDate;
+            const endMatch = !filterEndDate || pDate <= filterEndDate;
+            return startMatch && endMatch;
         });
 
-        return movementsWithTotals; // Show oldest first (chronological "up to down" order)
+        const filteredSales = sales.filter(s => {
+            if (!s.invoices?.invoice_date) return false;
+            const sDate = new Date(s.invoices.invoice_date);
+            const startMatch = !filterStartDate || sDate >= filterStartDate;
+            const endMatch = !filterEndDate || sDate <= filterEndDate;
+            return startMatch && endMatch;
+        });
+        
+        const dailyData = new Map<string, { purchase: number; sale: number; references: string[] }>();
 
-    }, [purchases, sales, product]);
+        filteredPurchases.forEach(p => {
+            const dateStr = p.purchase_date;
+            const entry = dailyData.get(dateStr) || { purchase: 0, sale: 0, references: [] };
+            entry.purchase += p.quantity;
+            if (p.reference_invoice && !entry.references.includes(p.reference_invoice)) {
+                entry.references.push(p.reference_invoice);
+            }
+            dailyData.set(dateStr, entry);
+        });
+
+        filteredSales.forEach(s => {
+            const dateStr = s.invoices?.invoice_date || '';
+            if (!dateStr) return;
+            const entry = dailyData.get(dateStr) || { purchase: 0, sale: 0, references: [] };
+            entry.sale += s.quantity;
+            if (s.invoices?.invoice_number && !entry.references.includes(s.invoices.invoice_number)) {
+                entry.references.push(s.invoices.invoice_number);
+            }
+            dailyData.set(dateStr, entry);
+        });
+
+        const sortedDates = Array.from(dailyData.keys()).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+        let lastClosingStock = openingStockForPeriod;
+        const movements: StockMovement[] = [];
+        
+        sortedDates.forEach(date => {
+            const data = dailyData.get(date)!;
+            const openingStock = lastClosingStock;
+            const purchase = data.purchase;
+            const total = openingStock + purchase;
+            const sale = data.sale;
+            const closingStock = total - sale;
+
+            movements.push({
+                date, invoice: data.references.join(', '), openingStock, purchase, total, sale, closingStock,
+            });
+            lastClosingStock = closingStock;
+        });
+        
+        return movements;
+    }, [purchases, sales, product, startDate, endDate]);
+    
+    React.useEffect(() => {
+      setCurrentPage(1);
+    }, [startDate, endDate]);
 
     const totalPages = Math.ceil(stockMovements.length / ITEMS_PER_PAGE);
     const paginatedMovements = useMemo(() => {
@@ -155,8 +204,9 @@ const ProductStockReportPage: React.FC = () => {
         return stockMovements.slice(startIndex, startIndex + ITEMS_PER_PAGE);
     }, [currentPage, stockMovements]);
 
+
     const handleExportPDF = () => {
-        if (!product || !stockMovements.length || !companyDetails) {
+        if (!product || !companyDetails) {
             toast('Cannot export PDF: Missing required data.');
             return;
         }
@@ -168,33 +218,55 @@ const ProductStockReportPage: React.FC = () => {
             const doc = new jsPDF();
             
             // Header
-            doc.setFontSize(20);
-            doc.text(companyDetails.name || 'Bio Tech Centre', 105, 20, { align: 'center' });
+            doc.setFontSize(18);
+            doc.text(companyDetails.name || 'Bio Tech Centre', 105, 15, { align: 'center' });
             doc.setFontSize(12);
             doc.setTextColor(100);
-            doc.text(`Stock Movement Report for: ${product.name}`, 105, 28, { align: 'center' });
+            doc.text(`Stock Movement Report`, 105, 22, { align: 'center' });
+            doc.setFontSize(10);
+            doc.text(`For: ${product.name}`, 105, 28, { align: 'center' });
+            if (startDate && endDate) {
+              doc.text(`Period: ${formatDate(startDate)} to ${formatDate(endDate)}`, 105, 33, { align: 'center' });
+            }
 
-            // Table
+            // Product Details
+            const detailsY = 42;
+            doc.setFontSize(10);
+            doc.setTextColor(0);
+            doc.setFont('helvetica', 'bold'); doc.text('Product SKU:', 14, detailsY);
+            doc.setFont('helvetica', 'normal'); doc.text(product.sku || 'N/A', 40, detailsY);
+
+            doc.setFont('helvetica', 'bold'); doc.text('Current Stock:', 14, detailsY + 5);
+            doc.setFont('helvetica', 'normal'); doc.text(`${product.stock_quantity} ${product.units?.abbreviation || ''}`, 40, detailsY + 5);
+            
+            const tableStartY = detailsY + 12;
+
             const tableData = stockMovements.map(item => [
-                formatDate(item.date),
-                item.type,
-                item.openingStock.toString(),
-                { content: item.quantityChange > 0 ? `+${item.quantityChange}` : item.quantityChange.toString(), styles: { halign: 'right' } },
-                item.reference,
-                item.closingStock.toString()
+                formatDate(item.date), item.invoice, item.openingStock.toString(),
+                item.purchase > 0 ? `+${item.purchase}` : '0', item.total.toString(),
+                item.sale > 0 ? `-${item.sale}` : '0', item.closingStock.toString(),
             ]);
 
             autoTable(doc, {
-                startY: 40,
-                head: [['Date', 'Type', 'Opening', 'Quantity', 'Reference', 'Closing']],
+                startY: tableStartY,
+                head: [['Date', 'Invoice', 'Opening', 'Purchase', 'Total', 'Sale', 'Closing']],
                 body: tableData,
                 theme: 'grid',
                 headStyles: { fillColor: [240, 240, 240], textColor: 20 },
-                styles: { fontSize: 9 },
-                columnStyles: {
-                    2: { halign: 'right' },
-                    3: { halign: 'right' },
-                    5: { halign: 'right' },
+                styles: { fontSize: 8 },
+                columnStyles: { 1: { cellWidth: 35 }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } },
+                didParseCell: (data) => {
+                    if (data.column.index === 3 && data.section === 'body' && parseInt(data.cell.text[0].replace('+', '')) > 0) {
+                        data.cell.styles.textColor = [40, 167, 69]; data.cell.styles.fontStyle = 'bold';
+                    }
+                    if (data.column.index === 5 && data.section === 'body' && parseInt(data.cell.text[0].replace('-', '')) > 0) {
+                        data.cell.styles.textColor = [220, 53, 69]; data.cell.styles.fontStyle = 'bold';
+                    }
+                },
+                didDrawPage: (data) => {
+                    const pageCount = doc.internal.getNumberOfPages();
+                    doc.setFontSize(8).setTextColor(150);
+                    doc.text(`Page ${data.pageNumber} of ${pageCount}`, doc.internal.pageSize.width - 20, doc.internal.pageSize.height - 10, { align: 'center' });
                 }
             });
             
@@ -207,7 +279,6 @@ const ProductStockReportPage: React.FC = () => {
             setIsExporting(false);
         }
     };
-
 
     if (isLoadingProduct) {
       return <div><Skeleton className="h-12 w-1/2 mb-6" /><Skeleton className="h-48 w-full" /></div>;
@@ -228,33 +299,43 @@ const ProductStockReportPage: React.FC = () => {
                        Stock Report: {product?.name}
                     </h1>
                 </div>
-                <Button variant="outline" onClick={handleExportPDF} disabled={isExporting || !stockMovements.length}>
+                <Button variant="outline" onClick={handleExportPDF} disabled={isExporting}>
                     <Download className="w-4 h-4 mr-2" />
                     {isExporting ? 'Exporting...' : 'Export to PDF'}
                 </Button>
             </div>
 
             <Card>
+                <CardHeader className="flex flex-col md:flex-row justify-between md:items-center">
+                    <div>
+                        <CardTitle>Product Details</CardTitle>
+                        <CardDescription>Current snapshot of the product inventory.</CardDescription>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mt-4 md:mt-0">
+                        <div><p className="text-gray-500 dark:text-gray-400">SKU</p><p className="font-semibold text-base">{product?.sku || 'N/A'}</p></div>
+                        <div><p className="text-gray-500 dark:text-gray-400">Current Stock</p><p className="font-semibold text-lg">{product?.stock_quantity} {product?.units?.abbreviation}</p></div>
+                    </div>
+                </CardHeader>
+            </Card>
+            
+            <Card>
                 <CardHeader>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                        <div>
-                            <p className="text-gray-500 dark:text-gray-400">Product Name</p>
-                            <p className="font-semibold text-base">{product?.name}</p>
+                    <CardTitle>Filter Report</CardTitle>
+                    <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+                        <div className="w-full sm:w-auto">
+                            <label htmlFor="start-date" className="text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
+                            <Input id="start-date" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="mt-1" />
                         </div>
-                         <div>
-                            <p className="text-gray-500 dark:text-gray-400">SKU</p>
-                            <p className="font-semibold text-base">{product?.sku || 'N/A'}</p>
-                        </div>
-                         <div>
-                            <p className="text-gray-500 dark:text-gray-400">Current Stock</p>
-                            <p className="font-semibold text-lg">{product?.stock_quantity} {product?.units?.abbreviation}</p>
+                        <div className="w-full sm:w-auto">
+                            <label htmlFor="end-date" className="text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
+                            <Input id="end-date" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="mt-1" />
                         </div>
                     </div>
                 </CardHeader>
             </Card>
 
             <Card>
-                <CardHeader><CardTitle>Stock Movements</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Daily Stock Summary</CardTitle></CardHeader>
                 <CardContent>
                     {(isLoadingPurchases || isLoadingSales) && !stockMovements.length ? <Skeleton className="h-64 w-full" /> : (
                         <>
@@ -263,30 +344,32 @@ const ProductStockReportPage: React.FC = () => {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Date</TableHead>
-                                            <TableHead>Type</TableHead>
+                                            <TableHead>Invoice</TableHead>
                                             <TableHead className="text-right">Opening</TableHead>
-                                            <TableHead className="text-right">Quantity</TableHead>
-                                            <TableHead>Reference</TableHead>
+                                            <TableHead className="text-right">Purchase</TableHead>
+                                            <TableHead className="text-right">Total</TableHead>
+                                            <TableHead className="text-right">Sale</TableHead>
                                             <TableHead className="text-right">Closing</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {paginatedMovements.length > 0 ? paginatedMovements.map(item => (
-                                            <TableRow key={item.id}>
+                                            <TableRow key={item.date}>
                                                 <TableCell data-label="Date">{formatDate(item.date)}</TableCell>
-                                                <TableCell data-label="Type">
-                                                    <Badge variant={item.type === 'Purchase' ? 'success' : 'destructive'}>{item.type}</Badge>
-                                                </TableCell>
+                                                <TableCell data-label="Invoice" className="truncate max-w-xs">{item.invoice || 'N/A'}</TableCell>
                                                 <TableCell data-label="Opening" className="text-right">{item.openingStock}</TableCell>
-                                                <TableCell data-label="Quantity" className={`text-right font-medium ${item.type === 'Purchase' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                                    {item.quantityChange > 0 ? `+${item.quantityChange}` : item.quantityChange}
+                                                <TableCell data-label="Purchase" className="text-right font-medium text-green-600 dark:text-green-400">
+                                                    {item.purchase > 0 ? `+${item.purchase}` : '0'}
                                                 </TableCell>
-                                                <TableCell data-label="Reference">{item.reference}</TableCell>
+                                                <TableCell data-label="Total" className="text-right">{item.total}</TableCell>
+                                                 <TableCell data-label="Sale" className="text-right font-medium text-red-600 dark:text-red-400">
+                                                    {item.sale > 0 ? `-${item.sale}` : '0'}
+                                                </TableCell>
                                                 <TableCell data-label="Closing" className="text-right font-semibold">{item.closingStock}</TableCell>
                                             </TableRow>
                                         )) : (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="text-center h-24">No stock movements found for this product.</TableCell>
+                                                <TableCell colSpan={7} className="text-center h-24">No stock movements found for the selected period.</TableCell>
                                             </TableRow>
                                         )}
                                     </TableBody>
