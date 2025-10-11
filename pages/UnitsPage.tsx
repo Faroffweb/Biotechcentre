@@ -31,6 +31,21 @@ const fetchUnits = async (page: number): Promise<{ data: Unit[], count: number }
 };
 
 const deleteUnit = async (unitId: string) => {
+  // Check if any products are using this unit
+  const { count, error: checkError } = await supabase
+    .from('products')
+    .select('*', { count: 'exact', head: true })
+    .eq('unit_id', unitId);
+
+  if (checkError) {
+    throw new Error(`Failed to check for product dependencies: ${checkError.message}`);
+  }
+
+  if (count && count > 0) {
+    throw new Error(`This unit cannot be deleted as it is used by ${count} product(s). Please remove it from products first.`);
+  }
+  
+  // If no dependencies, proceed with deletion
   const { error } = await supabase.from('units').delete().eq('id', unitId);
   if (error) throw new Error(error.message);
 };
@@ -58,7 +73,7 @@ const UnitsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['units'] });
     },
     onError: (error) => {
-      toast(`Error deleting unit: ${error.message}`);
+      toast(error.message);
     },
   });
 

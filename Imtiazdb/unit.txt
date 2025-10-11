@@ -15,10 +15,12 @@ CREATE TABLE public.units (
 -- Enable Row Level Security
 ALTER TABLE public.units ENABLE ROW LEVEL SECURITY;
 
--- Grant full public access
--- WARNING: Allows any visitor to create, read, update, and delete units.
-CREATE POLICY "Enable public full access for all units" ON "public"."units"
-AS PERMISSIVE FOR ALL
-TO public
+-- Grant full access to the application's API roles
+-- WARNING: This allows any user with the anon key to manage units.
+DROP POLICY IF EXISTS "Enable public full access for all units" ON "public"."units";
+DROP POLICY IF EXISTS "Enable full access for anon and authenticated users" ON "public"."units";
+
+CREATE POLICY "Enable full access for anon and authenticated users" ON "public"."units"
+FOR ALL TO anon, authenticated
 USING (true)
 WITH CHECK (true);
