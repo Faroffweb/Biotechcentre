@@ -406,16 +406,37 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- 4. Public Access Row Level Security Policies
--- WARNING: These policies grant full access to everyone.
-CREATE POLICY "Enable public full access for company details" ON "public"."company_details" FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Enable public full access for all customers" ON "public"."customers" FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Enable public full access for all units" ON "public"."units" FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Enable public full access for all categories" ON "public"."categories" FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Enable public full access for all products" ON "public"."products" FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Enable public full access for all purchases" ON "public"."purchases" FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Enable public full access for all invoices" ON "public"."invoices" FOR ALL TO public USING (true) WITH CHECK (true);
-CREATE POLICY "Enable public full access for all invoice items" ON "public"."invoice_items" FOR ALL TO public USING (true) WITH CHECK (true);
+-- 4. Row Level Security Policies
+-- These policies grant full access to anonymous and authenticated users, which is necessary
+-- for the application's API key (anon role) to perform database operations.
+
+-- Drop old policies if they exist with the old name or new name for idempotency.
+DROP POLICY IF EXISTS "Enable public full access for company details" ON "public"."company_details";
+DROP POLICY IF EXISTS "Enable full access for anon and authenticated users" ON "public"."company_details";
+DROP POLICY IF EXISTS "Enable public full access for all customers" ON "public"."customers";
+DROP POLICY IF EXISTS "Enable full access for anon and authenticated users" ON "public"."customers";
+DROP POLICY IF EXISTS "Enable public full access for all units" ON "public"."units";
+DROP POLICY IF EXISTS "Enable full access for anon and authenticated users" ON "public"."units";
+DROP POLICY IF EXISTS "Enable public full access for all categories" ON "public"."categories";
+DROP POLICY IF EXISTS "Enable full access for anon and authenticated users" ON "public"."categories";
+DROP POLICY IF EXISTS "Enable public full access for all products" ON "public"."products";
+DROP POLICY IF EXISTS "Enable full access for anon and authenticated users" ON "public"."products";
+DROP POLICY IF EXISTS "Enable public full access for all purchases" ON "public"."purchases";
+DROP POLICY IF EXISTS "Enable full access for anon and authenticated users" ON "public"."purchases";
+DROP POLICY IF EXISTS "Enable public full access for all invoices" ON "public"."invoices";
+DROP POLICY IF EXISTS "Enable full access for anon and authenticated users" ON "public"."invoices";
+DROP POLICY IF EXISTS "Enable public full access for all invoice items" ON "public"."invoice_items";
+DROP POLICY IF EXISTS "Enable full access for anon and authenticated users" ON "public"."invoice_items";
+
+-- Create new, correct policies
+CREATE POLICY "Enable full access for anon and authenticated users" ON "public"."company_details" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable full access for anon and authenticated users" ON "public"."customers" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable full access for anon and authenticated users" ON "public"."units" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable full access for anon and authenticated users" ON "public"."categories" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable full access for anon and authenticated users" ON "public"."products" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable full access for anon and authenticated users" ON "public"."purchases" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable full access for anon and authenticated users" ON "public"."invoices" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Enable full access for anon and authenticated users" ON "public"."invoice_items" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 
 -- 5. Seed Data (Optional)
