@@ -40,43 +40,10 @@ const fetchPurchases = async (page: number, searchTerm: string): Promise<{ data:
 };
 
 const deletePurchase = async (purchaseId: string) => {
-  const { data: purchase, error: fetchError } = await supabase
-    .from('purchases')
-    .select('product_id, quantity')
-    .eq('id', purchaseId)
-    .single();
-
-  if (fetchError) throw new Error(`Failed to fetch purchase: ${fetchError.message}`);
-  if (!purchase) throw new Error('Purchase not found');
-
-  const { data: product, error: productError } = await supabase
-    .from('products')
-    .select('stock_quantity')
-    .eq('id', purchase.product_id)
-    .single();
-
-  if (productError) throw new Error(`Failed to fetch product: ${productError.message}`);
-  if (!product) throw new Error('Product not found');
-
-  const newStock = product.stock_quantity - purchase.quantity;
-
-  if (newStock < 0) {
-    throw new Error('Cannot delete purchase: Would result in negative stock. Please adjust stock manually first.');
-  }
-
-  const { error: updateError } = await supabase
-    .from('products')
-    .update({ stock_quantity: newStock })
-    .eq('id', purchase.product_id);
-
-  if (updateError) throw new Error(`Failed to update stock: ${updateError.message}`);
-
-  const { error: deleteError } = await supabase
-    .from('purchases')
-    .delete()
-    .eq('id', purchaseId);
-
-  if (deleteError) throw new Error(`Failed to delete purchase: ${deleteError.message}`);
+  const { error } = await supabase.rpc('delete_purchase_safely', {
+    p_purchase_id: purchaseId
+  });
+  if (error) throw new Error(error.message);
 };
 
 const PurchasesPage: React.FC = () => {
@@ -87,6 +54,8 @@ const PurchasesPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [purchaseToDelete, setPurchaseToDelete] = useState<string | null>(null);
 
   const { data: purchasesData, isLoading, error } = useQuery({
     queryKey: ['purchases', currentPage, debouncedSearchTerm],
@@ -106,11 +75,12 @@ const PurchasesPage: React.FC = () => {
   const deleteMutation = useMutation({
     mutationFn: deletePurchase,
     onSuccess: () => {
-      toast('Purchase deleted and stock adjusted successfully!');
+      toast('Purchase record deleted successfully!');
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
-      queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['stock'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : 'An unknown error occurred.';
@@ -137,9 +107,16 @@ const PurchasesPage: React.FC = () => {
   };
 
   const handleDeleteClick = (purchaseId: string) => {
-    if (window.confirm('Are you sure you want to delete this purchase record? This will reduce the product stock accordingly.')) {
-      deleteMutation.mutate(purchaseId);
+    setPurchaseToDelete(purchaseId);
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (purchaseToDelete) {
+      deleteMutation.mutate(purchaseToDelete);
     }
+    setIsDeleteConfirmOpen(false);
+    setPurchaseToDelete(null);
   };
 
   const handleFormSuccess = () => {
@@ -265,6 +242,19 @@ const PurchasesPage: React.FC = () => {
           onSuccess={handleFormSuccess} 
           onCancel={() => setIsModalOpen(false)} 
         />
+      </Dialog>
+      <Dialog isOpen={isDeleteConfirmOpen} onClose={() => setIsDeleteConfirmOpen(false)} title="Confirm Deletion">
+        <div>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Are you sure you want to delete this purchase record? The product's stock will be reduced accordingly. This action cannot be undone.
+          </p>
+          <div className="flex justify-end space-x-4 pt-6">
+            <Button variant="outline" onClick={() => setIsDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        </div>
       </Dialog>
     </div>
   );

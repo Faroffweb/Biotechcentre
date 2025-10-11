@@ -426,7 +426,42 @@ BEGIN
 
     RETURN 'Invoice and associated items deleted successfully.';
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- NEW: Function to safely delete a purchase, checking stock levels first.
+CREATE OR REPLACE FUNCTION public.delete_purchase_safely(p_purchase_id uuid)
+RETURNS text AS $$
+DECLARE
+    v_product_id uuid;
+    v_quantity integer;
+    v_current_stock integer;
+BEGIN
+    -- Get purchase details
+    SELECT product_id, quantity INTO v_product_id, v_quantity
+    FROM public.purchases
+    WHERE id = p_purchase_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Purchase with ID % not found.', p_purchase_id;
+    END IF;
+
+    -- Get current stock of the product
+    SELECT stock_quantity INTO v_current_stock
+    FROM public.products
+    WHERE id = v_product_id;
+
+    -- Check if deleting this purchase would result in negative stock
+    IF (v_current_stock - v_quantity) < 0 THEN
+        RAISE EXCEPTION 'Cannot delete this purchase. Deleting it would result in a negative stock level for the product. Please adjust sales records first.';
+    END IF;
+
+    -- If the check passes, delete the purchase
+    -- The trigger `on_purchase_change` will handle the stock update.
+    DELETE FROM public.purchases WHERE id = p_purchase_id;
+
+    RETURN 'Purchase record deleted successfully.';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
 -- 4. Row Level Security Policies
