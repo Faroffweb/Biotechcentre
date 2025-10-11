@@ -32,6 +32,19 @@ const fetchCategories = async (page: number): Promise<{ data: Category[], count:
 };
 
 const deleteCategory = async (categoryId: string) => {
+  const { count, error: checkError } = await supabase
+    .from('products')
+    .select('*', { count: 'exact', head: true })
+    .eq('category_id', categoryId);
+
+  if (checkError) {
+    throw new Error(`Failed to check for product dependencies: ${checkError.message}`);
+  }
+
+  if (count && count > 0) {
+    throw new Error(`This category cannot be deleted as it is used by ${count} product(s). Please remove it from products first.`);
+  }
+
   const { error } = await supabase.from('categories').delete().eq('id', categoryId);
   if (error) throw new Error(error.message);
 };
@@ -75,7 +88,7 @@ const CategoriesPage: React.FC = () => {
   };
 
   const handleDeleteClick = (categoryId: string) => {
-    if (window.confirm('Are you sure you want to delete this category? This might affect products using it.')) {
+    if (window.confirm('Are you sure you want to delete this category?')) {
       deleteMutation.mutate(categoryId);
     }
   };

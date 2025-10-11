@@ -76,17 +76,48 @@ const fetchCompanyDetails = async (): Promise<CompanyDetails | null> => {
 };
 
 const deleteInvoice = async (invoiceId: string) => {
-  // Call the database function to handle the deletion atomically.
-  // This function deletes the invoice, which triggers a cascade delete on items,
-  // which in turn triggers stock updates.
-  const { error } = await supabase.rpc('delete_invoice_by_id', {
-    p_invoice_id: invoiceId
-  });
-    
-  if (error) {
-    // The error message from the RPC will be more informative.
-    throw new Error(error.message);
+  const { data: invoice, error: fetchError } = await supabase
+    .from('invoices')
+    .select('*, invoice_items(product_id, quantity)')
+    .eq('id', invoiceId)
+    .single();
+
+  if (fetchError) throw new Error(`Failed to fetch invoice: ${fetchError.message}`);
+  if (!invoice) throw new Error('Invoice not found');
+
+  for (const item of invoice.invoice_items) {
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .select('stock_quantity')
+      .eq('id', item.product_id)
+      .single();
+
+    if (productError) throw new Error(`Failed to fetch product: ${productError.message}`);
+    if (!product) continue;
+
+    const newStock = product.stock_quantity + item.quantity;
+
+    const { error: updateError } = await supabase
+      .from('products')
+      .update({ stock_quantity: newStock })
+      .eq('id', item.product_id);
+
+    if (updateError) throw new Error(`Failed to restore stock: ${updateError.message}`);
   }
+
+  const { error: deleteItemsError } = await supabase
+    .from('invoice_items')
+    .delete()
+    .eq('invoice_id', invoiceId);
+
+  if (deleteItemsError) throw new Error(`Failed to delete invoice items: ${deleteItemsError.message}`);
+
+  const { error: deleteError } = await supabase
+    .from('invoices')
+    .delete()
+    .eq('id', invoiceId);
+
+  if (deleteError) throw new Error(`Failed to delete invoice: ${deleteError.message}`);
 };
 
 

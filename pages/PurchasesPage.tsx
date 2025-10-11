@@ -40,8 +40,43 @@ const fetchPurchases = async (page: number, searchTerm: string): Promise<{ data:
 };
 
 const deletePurchase = async (purchaseId: string) => {
-  const { error } = await supabase.from('purchases').delete().eq('id', purchaseId);
-  if (error) throw new Error(error.message);
+  const { data: purchase, error: fetchError } = await supabase
+    .from('purchases')
+    .select('product_id, quantity')
+    .eq('id', purchaseId)
+    .single();
+
+  if (fetchError) throw new Error(`Failed to fetch purchase: ${fetchError.message}`);
+  if (!purchase) throw new Error('Purchase not found');
+
+  const { data: product, error: productError } = await supabase
+    .from('products')
+    .select('stock_quantity')
+    .eq('id', purchase.product_id)
+    .single();
+
+  if (productError) throw new Error(`Failed to fetch product: ${productError.message}`);
+  if (!product) throw new Error('Product not found');
+
+  const newStock = product.stock_quantity - purchase.quantity;
+
+  if (newStock < 0) {
+    throw new Error('Cannot delete purchase: Would result in negative stock. Please adjust stock manually first.');
+  }
+
+  const { error: updateError } = await supabase
+    .from('products')
+    .update({ stock_quantity: newStock })
+    .eq('id', purchase.product_id);
+
+  if (updateError) throw new Error(`Failed to update stock: ${updateError.message}`);
+
+  const { error: deleteError } = await supabase
+    .from('purchases')
+    .delete()
+    .eq('id', purchaseId);
+
+  if (deleteError) throw new Error(`Failed to delete purchase: ${deleteError.message}`);
 };
 
 const PurchasesPage: React.FC = () => {
@@ -71,8 +106,11 @@ const PurchasesPage: React.FC = () => {
   const deleteMutation = useMutation({
     mutationFn: deletePurchase,
     onSuccess: () => {
-      toast('Purchase record deleted successfully!');
+      toast('Purchase deleted and stock adjusted successfully!');
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : 'An unknown error occurred.';
@@ -99,7 +137,7 @@ const PurchasesPage: React.FC = () => {
   };
 
   const handleDeleteClick = (purchaseId: string) => {
-    if (window.confirm('Are you sure you want to delete this purchase record? This may affect stock levels.')) {
+    if (window.confirm('Are you sure you want to delete this purchase record? This will reduce the product stock accordingly.')) {
       deleteMutation.mutate(purchaseId);
     }
   };
