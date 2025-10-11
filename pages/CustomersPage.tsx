@@ -38,8 +38,18 @@ const fetchCustomers = async (page: number, searchTerm: string): Promise<{ data:
 };
 
 const deleteCustomer = async (customerId: string) => {
-  const { error } = await supabase.from('customers').delete().eq('id', customerId);
-  if (error) throw new Error(error.message);
+    const { count, error: invoiceError } = await supabase
+        .from('invoices')
+        .select('*', { count: 'exact', head: true })
+        .eq('customer_id', customerId);
+    
+    if (invoiceError) throw new Error(`Failed to check for invoices: ${invoiceError.message}`);
+    if (count && count > 0) {
+        throw new Error('This customer cannot be deleted because they have existing invoices.');
+    }
+
+    const { error } = await supabase.from('customers').delete().eq('id', customerId);
+    if (error) throw new Error(error.message);
 };
 
 const CustomersPage: React.FC = () => {
@@ -72,7 +82,7 @@ const CustomersPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
     },
     onError: (error) => {
-      toast(`Error deleting customer: ${error.message}`);
+      toast(error.message);
     },
   });
 

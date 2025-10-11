@@ -384,6 +384,27 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- NEW: Function to delete an invoice and its items atomically.
+CREATE OR REPLACE FUNCTION public.delete_invoice_by_id(p_invoice_id uuid)
+RETURNS text AS $$
+BEGIN
+    -- Deleting from the invoices table.
+    -- The `ON DELETE CASCADE` constraint on the `invoice_items` table
+    -- will automatically delete all associated items.
+    -- The `on_sale_change` trigger on the `invoice_items` table
+    -- will automatically fire for each deleted item, returning stock.
+    -- This entire operation occurs within a single transaction.
+    DELETE FROM public.invoices WHERE id = p_invoice_id;
+
+    IF NOT FOUND THEN
+        -- This case occurs if the invoice_id didn't exist
+        RAISE EXCEPTION 'Invoice with ID % not found.', p_invoice_id;
+    END IF;
+
+    RETURN 'Invoice and associated items deleted successfully.';
+END;
+$$ LANGUAGE plpgsql;
+
 
 -- 4. Public Access Row Level Security Policies
 -- WARNING: These policies grant full access to everyone.

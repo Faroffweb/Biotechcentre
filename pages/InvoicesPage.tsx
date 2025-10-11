@@ -75,9 +75,19 @@ const fetchCompanyDetails = async (): Promise<CompanyDetails | null> => {
 };
 
 const deleteInvoice = async (invoiceId: string) => {
-  const { error } = await supabase.from('invoices').delete().eq('id', invoiceId);
-  if (error) throw new Error(error.message);
+  // Call the database function to handle the deletion atomically.
+  // This function deletes the invoice, which triggers a cascade delete on items,
+  // which in turn triggers stock updates.
+  const { error } = await supabase.rpc('delete_invoice_by_id', {
+    p_invoice_id: invoiceId
+  });
+    
+  if (error) {
+    // The error message from the RPC will be more informative.
+    throw new Error(error.message);
+  }
 };
+
 
 const WhatsAppIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" {...props} fill="currentColor">
@@ -123,8 +133,13 @@ const InvoicesPage: React.FC = () => {
   const deleteMutation = useMutation({
     mutationFn: deleteInvoice,
     onSuccess: () => {
-      toast('Invoice deleted successfully!');
+      toast('Invoice deleted and stock adjusted successfully!');
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      // Invalidate all related data for UI consistency
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
     },
     onError: (error) => {
       toast(`Error deleting invoice: ${error.message}`);
@@ -403,7 +418,7 @@ const InvoicesPage: React.FC = () => {
   };
 
   const handleDeleteClick = (invoiceId: string) => {
-    if (window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
+    if (window.confirm('Are you sure you want to delete this invoice? This action will restore product stock and cannot be undone.')) {
       deleteMutation.mutate(invoiceId);
     }
   };

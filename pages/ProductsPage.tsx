@@ -52,8 +52,30 @@ const fetchCategories = async (): Promise<Category[]> => {
 };
 
 const deleteProduct = async (productId: string) => {
-  const { error } = await supabase.from('products').delete().eq('id', productId);
-  if (error) throw new Error(error.message);
+    // Check for dependencies first
+    const { count: purchaseCount, error: purchaseError } = await supabase
+        .from('purchases')
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', productId);
+    
+    if (purchaseError) throw new Error(`Failed to check purchases: ${purchaseError.message}`);
+    if (purchaseCount && purchaseCount > 0) {
+        throw new Error('This product cannot be deleted as it is part of purchase records.');
+    }
+
+    const { count: invoiceItemCount, error: invoiceItemError } = await supabase
+        .from('invoice_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', productId);
+
+    if (invoiceItemError) throw new Error(`Failed to check invoices: ${invoiceItemError.message}`);
+    if (invoiceItemCount && invoiceItemCount > 0) {
+        throw new Error('This product cannot be deleted as it is included in existing invoices.');
+    }
+
+    // If no dependencies, proceed with deletion
+    const { error } = await supabase.from('products').delete().eq('id', productId);
+    if (error) throw new Error(error.message);
 };
 
 const ProductsPage: React.FC = () => {
@@ -103,7 +125,7 @@ const ProductsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
     },
     onError: (error) => {
-      toast(`Error deleting product: ${error.message}`);
+      toast(error.message);
     },
   });
 
