@@ -12,6 +12,7 @@ import DynamicIcon from './ui/DynamicIcon';
 
 interface ProductFormProps {
   product?: Product;
+  isDuplicate?: boolean;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -44,7 +45,7 @@ const upsertProduct = async ({ product, id }: { product: ProductInsert | Product
   }
 };
 
-const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ product, isDuplicate = false, onSuccess, onCancel }) => {
   const queryClient = useQueryClient();
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
   const categorySuggestionsRef = useRef<HTMLDivElement>(null);
@@ -77,9 +78,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
     if (product && categories) {
         const categoryName = categories.find(c => c.id === product.category_id)?.name || '';
         reset({
-            name: product.name,
+            name: isDuplicate ? `${product.name} (Copy)` : product.name,
             hsn_code: product.hsn_code,
-            stock_quantity: product.stock_quantity,
+            stock_quantity: isDuplicate ? 0 : product.stock_quantity,
             tax_rate: product.tax_rate * 100,
             unit_id: product.unit_id || null,
             category_id: product.category_id || null,
@@ -96,7 +97,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
             category_name_display: '',
         });
     }
-  }, [product, reset, categories]);
+  }, [product, isDuplicate, reset, categories]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -133,7 +134,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
   const mutation = useMutation({
     mutationFn: upsertProduct,
     onSuccess: () => {
-      toast(`Product ${product ? 'updated' : 'added'} successfully!`);
+      toast(`Product ${product && !isDuplicate ? 'updated' : 'added'} successfully!`);
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['stock'] });
       onSuccess();
@@ -171,13 +172,13 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
       category_id: finalCategoryId,
     };
 
-    if (product?.id) { // This is an update
+    if (product?.id && !isDuplicate) { // This is an update
         mutation.mutate({ product: commonData, id: product.id });
-    } else { // This is a new product
+    } else { // This is a new product or a duplicate
         const newProduct: ProductInsert = {
             ...commonData,
-            unit_price: 0, // Default to 0
-            description: null, // Default to null
+            unit_price: product?.unit_price ?? 0,
+            description: product?.description ?? null,
         };
         mutation.mutate({ product: newProduct });
     }
@@ -255,7 +256,7 @@ const ProductForm: React.FC<ProductFormProps> = ({ product, onSuccess, onCancel 
           Cancel
         </Button>
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Saving...' : (product ? 'Update Product' : 'Create Product')}
+          {isSubmitting ? 'Saving...' : (product && !isDuplicate ? 'Update Product' : 'Create Product')}
         </Button>
       </div>
     </form>

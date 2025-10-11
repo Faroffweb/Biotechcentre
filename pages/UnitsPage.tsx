@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '../hooks/lib/supabase';
@@ -73,7 +74,7 @@ const UnitsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['units'] });
     },
     onError: (error) => {
-      toast(error.message);
+      toast(error instanceof Error ? error.message : 'Failed to delete unit.');
     },
   });
 
@@ -167,8 +168,8 @@ const UnitsPage: React.FC = () => {
                             <Button variant="ghost" size="icon" onClick={() => handleEditClick(unit)} aria-label="Edit Unit">
                               <Pencil className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(unit.id)} disabled={deleteMutation.isPending} aria-label="Delete Unit">
-                              <Trash2 className="w-4 h-4 text-red-500" />
+                            <Button variant="destructive-outline" size="icon" onClick={() => handleDeleteClick(unit.id)} disabled={deleteMutation.isPending} aria-label="Delete Unit">
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </TableCell>

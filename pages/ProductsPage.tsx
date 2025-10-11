@@ -8,7 +8,7 @@ import { Product, Category } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
-import { Pencil, Trash2, PlusCircle, Search, ChevronDown } from 'lucide-react';
+import { Pencil, Trash2, PlusCircle, Search, ChevronDown, Copy } from 'lucide-react';
 import Dialog from '../components/ui/Dialog';
 import ProductForm from '../components/ProductForm';
 import { toast } from '../components/ui/Toaster';
@@ -82,12 +82,15 @@ const ProductsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | undefined>(undefined);
+  const [isDuplicateMode, setIsDuplicateMode] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<string | null>(null);
 
   const { data: productsData, isLoading, error } = useQuery({
     queryKey: ['products', currentPage, debouncedSearchTerm, selectedCategory],
@@ -125,29 +128,45 @@ const ProductsPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
     },
     onError: (error) => {
-      toast(error.message);
+      toast(error instanceof Error ? error.message : 'Failed to delete product.');
     },
   });
 
   const handleAddClick = () => {
     setSelectedProduct(undefined);
+    setIsDuplicateMode(false);
     setIsModalOpen(true);
   };
 
   const handleEditClick = (product: Product) => {
     setSelectedProduct(product);
+    setIsDuplicateMode(false);
+    setIsModalOpen(true);
+  };
+  
+  const handleDuplicateClick = (product: Product) => {
+    setSelectedProduct(product);
+    setIsDuplicateMode(true);
     setIsModalOpen(true);
   };
 
   const handleDeleteClick = (productId: string) => {
-    if (window.confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
-      deleteMutation.mutate(productId);
+    setProductToDelete(productId);
+    setIsDeleteConfirmOpen(true);
+  };
+  
+  const confirmDelete = () => {
+    if (productToDelete) {
+      deleteMutation.mutate(productToDelete);
     }
+    setIsDeleteConfirmOpen(false);
+    setProductToDelete(null);
   };
 
   const handleFormSuccess = () => {
     setIsModalOpen(false);
     setSelectedProduct(undefined);
+    setIsDuplicateMode(false);
   };
 
   const selectedCategoryLabel = categories?.find(c => c.id === selectedCategory)?.name || 'All Categories';
@@ -175,6 +194,7 @@ const ProductsPage: React.FC = () => {
               <TableCell><Skeleton className="h-5 w-1/4" /></TableCell>
               <TableCell>
                 <div className="flex items-center justify-center space-x-2">
+                  <Skeleton className="h-8 w-8 rounded-md" />
                   <Skeleton className="h-8 w-8 rounded-md" />
                   <Skeleton className="h-8 w-8 rounded-md" />
                 </div>
@@ -292,8 +312,11 @@ const ProductsPage: React.FC = () => {
                             <Button variant="ghost" size="icon" onClick={() => handleEditClick(product)} aria-label="Edit Product">
                               <Pencil className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(product.id)} disabled={deleteMutation.isPending} aria-label="Delete Product">
-                              <Trash2 className="w-4 h-4 text-red-500" />
+                            <Button variant="ghost" size="icon" onClick={() => handleDuplicateClick(product)} aria-label="Duplicate Product">
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                            <Button variant="destructive-outline" size="icon" onClick={() => handleDeleteClick(product.id)} disabled={deleteMutation.isPending} aria-label="Delete Product">
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </TableCell>
@@ -318,12 +341,27 @@ const ProductsPage: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Dialog isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedProduct ? 'Edit Product' : 'Add New Product'}>
+      <Dialog isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedProduct && !isDuplicateMode ? 'Edit Product' : 'Add New Product'}>
         <ProductForm 
           product={selectedProduct} 
+          isDuplicate={isDuplicateMode}
           onSuccess={handleFormSuccess} 
           onCancel={() => setIsModalOpen(false)} 
         />
+      </Dialog>
+      
+      <Dialog isOpen={isDeleteConfirmOpen} onClose={() => setIsDeleteConfirmOpen(false)} title="Confirm Deletion">
+        <div>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Are you sure you want to delete this product? This action cannot be undone and will permanently remove the product record.
+          </p>
+          <div className="flex justify-end space-x-4 pt-6">
+            <Button variant="outline" onClick={() => setIsDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        </div>
       </Dialog>
     </div>
   );

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 // Fix: Import `keepPreviousData` from TanStack Query v5.
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -82,7 +83,7 @@ const CustomersPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
     },
     onError: (error) => {
-      toast(error.message);
+      toast(error instanceof Error ? error.message : 'Failed to delete customer.');
     },
   });
 
@@ -190,8 +191,8 @@ const CustomersPage: React.FC = () => {
                             <Button variant="ghost" size="icon" onClick={() => handleEditClick(customer)} aria-label="Edit Customer">
                               <Pencil className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(customer.id)} disabled={deleteMutation.isPending} aria-label="Delete Customer">
-                              <Trash2 className="w-4 h-4 text-red-500" />
+                            <Button variant="destructive-outline" size="icon" onClick={() => handleDeleteClick(customer.id)} disabled={deleteMutation.isPending} aria-label="Delete Customer">
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </TableCell>

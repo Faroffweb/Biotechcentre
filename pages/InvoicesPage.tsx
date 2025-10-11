@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '../hooks/lib/supabase';
@@ -142,7 +143,8 @@ const InvoicesPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['reports'] });
     },
     onError: (error) => {
-      toast(`Error deleting invoice: ${error.message}`);
+      const message = error instanceof Error ? error.message : 'An unknown error occurred.';
+      toast(`Error deleting invoice: ${message}`);
     },
   });
 
@@ -510,8 +512,8 @@ const InvoicesPage: React.FC = () => {
                             <Button variant="ghost" size="icon" onClick={() => navigate(`/invoices/edit/${invoice.id}`)} aria-label="Edit Invoice">
                               <Pencil className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(invoice.id)} disabled={deleteMutation.isPending} aria-label="Delete Invoice">
-                              <Trash2 className="w-4 h-4 text-red-500" />
+                            <Button variant="destructive-outline" size="icon" onClick={() => handleDeleteClick(invoice.id)} disabled={deleteMutation.isPending} aria-label="Delete Invoice">
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </TableCell>

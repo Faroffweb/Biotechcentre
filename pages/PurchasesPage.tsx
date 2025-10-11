@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 // Fix: Import `keepPreviousData` from TanStack Query v5.
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -6,7 +7,7 @@ import { PurchaseWithProduct } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
-import { PlusCircle, Pencil, Trash2, Search } from 'lucide-react';
+import { PlusCircle, Pencil, Trash2, Search, Copy } from 'lucide-react';
 import { formatDate, formatCurrency } from '../hooks/lib/utils';
 import Dialog from '../components/ui/Dialog';
 import PurchaseForm from '../components/PurchaseForm';
@@ -47,6 +48,7 @@ const PurchasesPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseWithProduct | undefined>(undefined);
+  const [isDuplicateMode, setIsDuplicateMode] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -73,17 +75,26 @@ const PurchasesPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
     },
     onError: (error) => {
-      toast(`Error deleting purchase: ${error.message}`);
+      const message = error instanceof Error ? error.message : 'An unknown error occurred.';
+      toast(`Error deleting purchase: ${message}`);
     },
   });
 
   const handleAddClick = () => {
     setSelectedPurchase(undefined);
+    setIsDuplicateMode(false);
     setIsModalOpen(true);
   };
 
   const handleEditClick = (purchase: PurchaseWithProduct) => {
     setSelectedPurchase(purchase);
+    setIsDuplicateMode(false);
+    setIsModalOpen(true);
+  };
+  
+  const handleDuplicateClick = (purchase: PurchaseWithProduct) => {
+    setSelectedPurchase(purchase);
+    setIsDuplicateMode(true);
     setIsModalOpen(true);
   };
 
@@ -96,6 +107,7 @@ const PurchasesPage: React.FC = () => {
   const handleFormSuccess = () => {
     setIsModalOpen(false);
     setSelectedPurchase(undefined);
+    setIsDuplicateMode(false);
   };
 
   const renderSkeleton = () => (
@@ -180,8 +192,11 @@ const PurchasesPage: React.FC = () => {
                           <Button variant="ghost" size="icon" onClick={() => handleEditClick(purchase)} aria-label="Edit Purchase">
                             <Pencil className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(purchase.id)} disabled={deleteMutation.isPending} aria-label="Delete Purchase">
-                            <Trash2 className="w-4 h-4 text-red-500" />
+                          <Button variant="ghost" size="icon" onClick={() => handleDuplicateClick(purchase)} aria-label="Duplicate Purchase">
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                          <Button variant="destructive-outline" size="icon" onClick={() => handleDeleteClick(purchase.id)} disabled={deleteMutation.isPending} aria-label="Delete Purchase">
+                            <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -205,9 +220,10 @@ const PurchasesPage: React.FC = () => {
           )}
         </CardContent>
       </Card>
-       <Dialog isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedPurchase ? 'Edit Purchase' : 'Add New Purchase'}>
+       <Dialog isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={selectedPurchase && !isDuplicateMode ? 'Edit Purchase' : 'Add New Purchase'}>
         <PurchaseForm 
           purchase={selectedPurchase} 
+          isDuplicate={isDuplicateMode}
           onSuccess={handleFormSuccess} 
           onCancel={() => setIsModalOpen(false)} 
         />

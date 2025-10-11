@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '../hooks/lib/supabase';
@@ -58,7 +59,8 @@ const CategoriesPage: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
     },
     onError: (error) => {
-      toast(`Error deleting category: ${error.message}`);
+      const message = error instanceof Error ? error.message : 'An unknown error occurred.';
+      toast(`Error deleting category: ${message}`);
     },
   });
 
@@ -162,8 +164,8 @@ const CategoriesPage: React.FC = () => {
                             <Button variant="ghost" size="icon" onClick={() => handleEditClick(category)} aria-label="Edit Category">
                               <Pencil className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(category.id)} disabled={deleteMutation.isPending} aria-label="Delete Category">
-                              <Trash2 className="w-4 h-4 text-red-500" />
+                            <Button variant="destructive-outline" size="icon" onClick={() => handleDeleteClick(category.id)} disabled={deleteMutation.isPending} aria-label="Delete Category">
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </TableCell>

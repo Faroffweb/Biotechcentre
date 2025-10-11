@@ -10,6 +10,7 @@ import { toast } from './ui/Toaster';
 
 interface PurchaseFormProps {
   purchase?: Purchase;
+  isDuplicate?: boolean;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -55,7 +56,7 @@ const upsertPurchase = async ({ purchaseData, id }: { purchaseData: PurchaseInse
   }
 };
 
-const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCancel }) => {
+const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, isDuplicate = false, onSuccess, onCancel }) => {
   const queryClient = useQueryClient();
   const [productMode, setProductMode] = useState<'existing' | 'new'>('existing');
   
@@ -97,14 +98,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
   const { data: units, isLoading: isLoadingUnits } = useQuery({ queryKey: ['unitsList'], queryFn: fetchUnits });
   const { data: categories, isLoading: isLoadingCategories } = useQuery({ queryKey: ['categoriesList'], queryFn: fetchCategories });
   
-  const isEditing = !!purchase;
+  const isEditing = !!purchase && !isDuplicate;
 
   useEffect(() => {
-    if (isEditing && purchase) {
+    if ((isEditing || isDuplicate) && purchase) {
       reset({
         ...purchase,
-        purchase_date: new Date(purchase.purchase_date).toISOString().split('T')[0],
-        product_name: '',
+        purchase_date: isDuplicate ? new Date().toISOString().split('T')[0] : new Date(purchase.purchase_date).toISOString().split('T')[0],
+        reference_invoice: isDuplicate ? '' : purchase.reference_invoice,
+        product_name: '', // Will be set by another effect
       });
     } else {
       reset({
@@ -114,18 +116,20 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
         product_name: '',
       });
     }
-  }, [purchase, isEditing, reset]);
-
+  }, [purchase, isEditing, isDuplicate, reset]);
+  
   useEffect(() => {
-    if (isEditing && purchase && products?.length) {
+    if ((isEditing || isDuplicate) && purchase && products?.length) {
         const productName = products.find(p => p.id === purchase.product_id)?.name || '';
         setValue('product_name', productName);
     }
-  }, [isEditing, purchase, products, setValue]);
+  }, [isEditing, isDuplicate, purchase, products, setValue]);
   
   useEffect(() => {
-    if (isEditing) setProductMode('existing');
-  }, [isEditing]);
+    if (isEditing || isDuplicate) {
+        setProductMode('existing');
+    }
+  }, [isEditing, isDuplicate]);
   
   const productNameValue = watch('product_name');
   const categoryNameValue = watch('new_product_category_name');
@@ -185,7 +189,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
   const mutation = useMutation({
     mutationFn: upsertPurchase,
     onSuccess: () => {
-      toast(`Purchase ${purchase ? 'updated' : 'added'} successfully!`);
+      toast(`Purchase ${isEditing ? 'updated' : 'added'} successfully!`);
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
       queryClient.invalidateQueries({ queryKey: ['products'] }); 
       queryClient.invalidateQueries({ queryKey: ['productsList'] }); 
@@ -195,9 +199,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
   });
 
   const onSubmit: SubmitHandler<PurchaseFormData> = async (data) => {
-    let productId = purchase?.product_id;
+    let productId = isEditing || isDuplicate ? purchase?.product_id : undefined;
 
-    if (productMode === 'new' && !isEditing) {
+    if (productMode === 'new' && !isEditing && !isDuplicate) {
         if (!data.new_product_name) { toast('New product name is required.'); return; }
         
         // --- CATEGORY LOGIC ---
@@ -259,7 +263,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
         productId = createdProduct.id;
     }
 
-    if (productMode === 'existing' && !isEditing) {
+    if (productMode === 'existing' && !isEditing && !isDuplicate) {
         const selectedProduct = products?.find(p => p.name === data.product_name);
         if (!selectedProduct) { toast('Please select a valid product from the list.'); return; }
         productId = selectedProduct.id;
@@ -272,7 +276,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
         reference_invoice: data.reference_invoice,
         quantity: Number(data.quantity),
     };
-    mutation.mutate({ purchaseData, id: purchase?.id });
+    mutation.mutate({ purchaseData, id: isEditing ? purchase?.id : undefined });
   };
   
   const highlightMatch = (text: string, query: string) => {
@@ -287,7 +291,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      {!isEditing && (
+      {!(isEditing || isDuplicate) && (
         <div className="flex items-center space-x-4">
             <label className="flex items-center"><input type="radio" value="existing" checked={productMode === 'existing'} onChange={() => setProductMode('existing')} className="mr-2" />Existing Product</label>
             <label className="flex items-center"><input type="radio" value="new" checked={productMode === 'new'} onChange={() => setProductMode('new')} className="mr-2" />New Product</label>
@@ -296,7 +300,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
       {productMode === 'existing' ? (
         <div className="relative" ref={productSuggestionsRef}>
             <label htmlFor="product_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Product</label>
-            <Input id="product_name" {...register('product_name', { required: 'Please select a product' })} disabled={isLoadingProducts || isEditing} placeholder={isLoadingProducts ? "Loading..." : "Type to search"} onFocus={() => setShowProductSuggestions(true)} autoComplete="off" />
+            <Input id="product_name" {...register('product_name', { required: 'Please select a product' })} disabled={isLoadingProducts || isEditing || isDuplicate} placeholder={isLoadingProducts ? "Loading..." : "Type to search"} onFocus={() => setShowProductSuggestions(true)} autoComplete="off" />
             {showProductSuggestions && productNameValue && (
               <div className="absolute z-10 w-full mt-1.5 rounded-lg bg-white shadow-xl ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700">
                 <ul className="max-h-60 overflow-y-auto text-sm p-1">
@@ -374,7 +378,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({ purchase, onSuccess, onCanc
       </div>
       <div className="flex justify-end space-x-4 pt-4">
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>Cancel</Button>
-        <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : (purchase ? 'Update Purchase' : 'Create Purchase')}</Button>
+        <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : (isEditing ? 'Update Purchase' : 'Create Purchase')}</Button>
       </div>
     </form>
   );
