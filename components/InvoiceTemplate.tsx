@@ -29,13 +29,13 @@ const InvoiceTemplate: React.FC<InvoiceTemplateProps> = ({ invoice, companyDetai
         }
       }
       h1,h2,h3 { margin:0; color: #111; }
-      .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid #ddd; padding-bottom:10px; margin-bottom:20px; }
+      .header { display:flex; justify-content:space-between; align-items:flex-start; border:1px solid #ddd; padding:15px; border-radius:6px; margin-bottom:25px; }
       .company h1 { font-size: 1.8em; }
       .company p { font-size: 0.9em; color: #777; margin-top: 2px; }
       .invoice-meta { text-align:right; }
       .invoice-meta h2 { margin:0 0 5px 0; font-size: 1.5em; color: #555; }
       .invoice-meta p { margin: 0; line-height: 1.4; }
-      .columns { display:flex; justify-content:space-between; margin-bottom:20px; }
+      .columns { display:flex; justify-content:space-between; margin-bottom:25px; }
       .panel { width:48%; border:1px solid #ddd; padding:10px; border-radius:6px; font-size: 0.9em; }
       .panel h3 { font-size: 1.1em; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;}
       .panel p { margin: 0; line-height: 1.6; }
