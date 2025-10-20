@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '../hooks/lib/supabase';
 import { InvoiceWithDetails, InvoiceItem, Invoice, Customer, Unit, CompanyDetails } from '../types';
@@ -17,7 +18,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import Skeleton from '../components/ui/Skeleton';
 import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -99,6 +100,7 @@ const WhatsAppIcon = (props: React.SVGProps<SVGSVGElement>) => (
 const InvoicesPage: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const invoicePreviewRef = useRef<HTMLDivElement>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<FullInvoice | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -158,155 +160,46 @@ const InvoicesPage: React.FC = () => {
     }
   };
   
-  const handleDownloadPDF = () => {
-    if (!selectedInvoice || !companyDetails) {
-        toast('Cannot download PDF: Missing invoice or company data.');
-        return;
+  const handleDownloadPDF = async () => {
+    const input = invoicePreviewRef.current;
+    if (!selectedInvoice || !input) {
+      toast('Cannot download PDF: Missing invoice or template reference.');
+      return;
     }
-    
+
     toast('Generating PDF...');
+    try {
+      const canvas = await html2canvas(input, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
 
-    const doc = new jsPDF();
-    const invoice = selectedInvoice;
-    const company = companyDetails;
-    const pageHeight = doc.internal.pageSize.getHeight();
-    let finalY = 0; // Track the final Y position after the table
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'pt',
+        format: 'a4',
+      });
 
-    // --- Header ---
-    let yPos = 22;
-    doc.setFontSize(20);
-    doc.text(company.name || 'Company Name', 14, yPos);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+      const finalWidth = imgWidth * ratio;
+      const finalHeight = imgHeight * ratio;
+      
+      const x = (pdfWidth - finalWidth) / 2;
 
-    if (company.slogan) {
-        yPos += 6;
-        doc.setFontSize(10).setTextColor(100);
-        doc.text(company.slogan, 14, yPos);
-        doc.setTextColor(0);
+      pdf.addImage(imgData, 'PNG', x, 0, finalWidth, finalHeight);
+      pdf.save(`Invoice-${selectedInvoice.invoice_number}.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast('Failed to generate PDF.');
     }
-    
-    yPos += 8;
-    doc.setFontSize(10);
-    doc.text(company.address || '', 14, yPos);
-    yPos += 5;
-    doc.text(`GSTIN: ${company.gstin || 'N/A'}`, 14, yPos);
-
-    doc.setFontSize(16);
-    doc.text('Tax Invoice', 200, 22, { align: 'right' });
-    doc.setFontSize(10);
-    doc.text(`Invoice No: ${invoice.invoice_number}`, 200, 30, { align: 'right' });
-    doc.text(`Date: ${formatDate(invoice.invoice_date)}`, 200, 35, { align: 'right' });
-
-    const lineY = yPos + 5;
-    doc.setLineWidth(0.5);
-    doc.line(14, lineY, 200, lineY);
-
-
-    // --- Billed To Section ---
-    const billedToY = lineY + 10;
-    doc.setFontSize(10).setFont('helvetica', 'bold');
-    doc.text('Billed To:', 14, billedToY);
-    doc.setFont('helvetica', 'normal');
-    doc.text(invoice.customers?.name || 'Guest Customer', 14, billedToY + 5);
-    const addressLines = doc.splitTextToSize(invoice.customers?.billing_address || 'N/A', 80);
-    doc.text(addressLines, 14, billedToY + 10);
-    const addressHeight = addressLines.length * 5;
-    doc.text(`GSTIN / PAN: ${invoice.customers?.gst_pan || 'N/A'}`, 14, billedToY + 10 + addressHeight);
-    doc.text(`Phone: ${invoice.customers?.phone || 'N/A'}`, 14, billedToY + 15 + addressHeight);
-
-    // --- Items Table ---
-    const tableStartY = billedToY + 25 + addressHeight;
-    const tableData = invoice.invoice_items.map((item, index) => {
-        const taxableAmount = item.quantity * item.unit_price;
-        const inclusiveRate = item.unit_price * (1 + item.tax_rate);
-        const total = taxableAmount * (1 + item.tax_rate);
-        return [
-            index + 1,
-            item.products?.name || 'N/A',
-            item.products?.hsn_code || 'N/A',
-            item.quantity,
-            item.products?.units?.abbreviation || 'N/A',
-            formatNumber(inclusiveRate),
-            formatNumber(taxableAmount),
-            `${(item.tax_rate * 100).toFixed(0)}%`,
-            formatNumber(total),
-        ];
-    });
-
-    autoTable(doc, {
-        startY: tableStartY,
-        head: [['#', 'Item', 'HSN', 'Qty', 'Unit', 'Rate', 'Taxable', 'GST', 'Total']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { fillColor: [230, 230, 230], textColor: 20 },
-        didDrawPage: (data) => {
-            finalY = data.cursor?.y || 0;
-        }
-    });
-
-    // --- Totals Section ---
-    const taxableTotal = invoice.invoice_items.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0);
-    const taxTotal = invoice.total_amount - taxableTotal;
-    const totalsY = finalY + 10 > pageHeight - 50 ? 20 : finalY + 10;
-    
-    autoTable(doc, {
-        startY: totalsY,
-        body: [
-            ['Subtotal', formatNumber(taxableTotal)],
-            ['CGST', formatNumber(taxTotal / 2)],
-            ['SGST', formatNumber(taxTotal / 2)],
-            [{ content: 'Grand Total', styles: { fontStyle: 'bold' } }, { content: formatNumber(invoice.total_amount), styles: { fontStyle: 'bold' } }],
-        ],
-        theme: 'plain',
-        tableWidth: 80,
-        margin: { left: 115 },
-    });
-    
-    finalY = (doc as any).lastAutoTable.finalY;
-
-    // --- Separator Line ---
-    const separatorY = finalY + 8;
-    doc.setLineWidth(0.2);
-    doc.line(14, separatorY, 200, separatorY);
-
-    // --- Notes & Bank Details ---
-    let notesY = separatorY + 8;
-    if (invoice.notes) {
-      doc.setFont('helvetica', 'bold').text('Notes:', 14, notesY);
-      doc.setFont('helvetica', 'normal');
-      const notesLines = doc.splitTextToSize(invoice.notes, 180);
-      doc.text(notesLines, 14, notesY + 5);
-      notesY += notesLines.length * 5 + 5;
-    }
-
-    doc.setFont('helvetica', 'bold').text('Bank Details:', 14, notesY);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Account Name: ${company.account_name || 'N/A'}`, 14, notesY + 5);
-    doc.text(`Account No: ${company.account_number || 'N/A'}`, 14, notesY + 10);
-    doc.text(`Bank: ${company.bank_name || 'N/A'}`, 14, notesY + 15);
-    doc.text(`IFSC: ${company.ifsc_code || 'N/A'}`, 14, notesY + 20);
-
-    // Check if there is enough space for the signature
-    let signatureYPos = notesY + 50;
-    if (signatureYPos > pageHeight - 40) {
-        doc.addPage();
-        signatureYPos = 40; // Position at top of new page
-    }
-    
-    // --- Signature ---
-    doc.setLineWidth(0.2);
-    doc.line(130, signatureYPos, 200, signatureYPos); // Line on the right side
-    doc.setFontSize(10).setTextColor(0);
-    doc.text('Authorized Signatory', 165, signatureYPos + 5, { align: 'center' });
-
-    // --- Footer ---
-    doc.setFontSize(8).setTextColor(150);
-    doc.text('This is a computer-generated invoice.', 105, pageHeight - 10, { align: 'center' });
-
-    doc.save(`Invoice-${invoice.invoice_number}.pdf`);
   };
   
   const handleShareWhatsApp = async () => {
-    if (!selectedInvoice || !companyDetails) {
+    const input = invoicePreviewRef.current;
+    if (!selectedInvoice || !companyDetails || !input) {
         toast('Cannot share: Missing invoice or company data.');
         return;
     }
@@ -314,97 +207,36 @@ const InvoicesPage: React.FC = () => {
     toast('Preparing to share...');
 
     try {
-        const doc = new jsPDF();
-        const invoice = selectedInvoice;
-        const company = companyDetails;
-        const pageHeight = doc.internal.pageSize.getHeight();
-        let finalY = 0;
+        const canvas = await html2canvas(input, { scale: 2 });
+        const imgData = canvas.toDataURL('image/png');
 
-        // PDF Generation Logic (same as download)
-        let yPos = 22;
-        doc.setFontSize(20).text(company.name || 'Company Name', 14, yPos);
-        if (company.slogan) {
-            yPos += 6;
-            doc.setFontSize(10).setTextColor(100).text(company.slogan, 14, yPos);
-            doc.setTextColor(0);
-        }
-        yPos += 8;
-        doc.setFontSize(10).text(company.address || '', 14, yPos);
-        yPos += 5;
-        doc.text(`GSTIN: ${company.gstin || 'N/A'}`, 14, yPos);
-
-        doc.setFontSize(16).text('Tax Invoice', 200, 22, { align: 'right' });
-        doc.setFontSize(10).text(`Invoice No: ${invoice.invoice_number}`, 200, 30, { align: 'right' }).text(`Date: ${formatDate(invoice.invoice_date)}`, 200, 35, { align: 'right' });
-        
-        const lineY = yPos + 5;
-        doc.setLineWidth(0.5).line(14, lineY, 200, lineY);
-        
-        const billedToY = lineY + 10;
-        doc.setFont('helvetica', 'bold').text('Billed To:', 14, billedToY);
-        doc.setFont('helvetica', 'normal').text(invoice.customers?.name || 'Guest Customer', 14, billedToY + 5);
-        const addressLines = doc.splitTextToSize(invoice.customers?.billing_address || 'N/A', 80);
-        doc.text(addressLines, 14, billedToY + 10);
-        const addressHeight = addressLines.length * 5;
-        doc.text(`GSTIN / PAN: ${invoice.customers?.gst_pan || 'N/A'}`, 14, billedToY + 10 + addressHeight);
-        doc.text(`Phone: ${invoice.customers?.phone || 'N/A'}`, 14, billedToY + 15 + addressHeight);
-        
-        const tableStartY = billedToY + 25 + addressHeight;
-        const tableData = invoice.invoice_items.map((item, index) => {
-            const taxableAmount = item.quantity * item.unit_price;
-            const inclusiveRate = item.unit_price * (1 + item.tax_rate);
-            const total = taxableAmount * (1 + item.tax_rate);
-            return [index + 1, item.products?.name || 'N/A', item.products?.hsn_code || 'N/A', item.quantity, item.products?.units?.abbreviation || 'N/A', formatNumber(inclusiveRate), formatNumber(taxableAmount), `${(item.tax_rate * 100).toFixed(0)}%`, formatNumber(total)];
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'pt',
+            format: 'a4',
         });
-        autoTable(doc, { startY: tableStartY, head: [['#', 'Item', 'HSN', 'Qty', 'Unit', 'Rate', 'Taxable', 'GST', 'Total']], body: tableData, theme: 'grid', headStyles: { fillColor: [230, 230, 230], textColor: 20 }, didDrawPage: (data) => { finalY = data.cursor?.y || 0; }});
+
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
         
-        const taxableTotal = invoice.invoice_items.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0);
-        const taxTotal = invoice.total_amount - taxableTotal;
-        const totalsY = finalY + 10 > pageHeight - 50 ? 20 : finalY + 10;
-        autoTable(doc, { startY: totalsY, body: [['Subtotal', formatNumber(taxableTotal)], ['CGST', formatNumber(taxTotal / 2)], ['SGST', formatNumber(taxTotal / 2)], [{ content: 'Grand Total', styles: { fontStyle: 'bold' } }, { content: formatNumber(invoice.total_amount), styles: { fontStyle: 'bold' } }]], theme: 'plain', tableWidth: 80, margin: { left: 115 } });
-        finalY = (doc as any).lastAutoTable.finalY;
+        const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+        const finalWidth = imgWidth * ratio;
+        const finalHeight = imgHeight * ratio;
+
+        const x = (pdfWidth - finalWidth) / 2;
         
-        // --- Separator Line ---
-        const separatorY = finalY + 8;
-        doc.setLineWidth(0.2);
-        doc.line(14, separatorY, 200, separatorY);
+        pdf.addImage(imgData, 'PNG', x, 0, finalWidth, finalHeight);
 
-        let notesY = separatorY + 8;
-        if (invoice.notes) {
-            doc.setFont('helvetica', 'bold').text('Notes:', 14, notesY);
-            doc.setFont('helvetica', 'normal');
-            const notesLines = doc.splitTextToSize(invoice.notes, 180);
-            doc.text(notesLines, 14, notesY + 5);
-            notesY += notesLines.length * 5 + 5;
-        }
-
-        doc.setFont('helvetica', 'bold').text('Bank Details:', 14, notesY);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Account Name: ${company.account_name || 'N/A'}`, 14, notesY + 5);
-        doc.text(`Account No: ${company.account_number || 'N/A'}`, 14, notesY + 10);
-        doc.text(`Bank: ${company.bank_name || 'N/A'}`, 14, notesY + 15);
-        doc.text(`IFSC: ${company.ifsc_code || 'N/A'}`, 14, notesY + 20);
-
-        let signatureYPos = notesY + 50;
-        if (signatureYPos > pageHeight - 40) {
-            doc.addPage();
-            signatureYPos = 40;
-        }
-        
-        doc.setLineWidth(0.2);
-        doc.line(130, signatureYPos, 200, signatureYPos);
-        doc.setFontSize(10).setTextColor(0);
-        doc.text('Authorized Signatory', 165, signatureYPos + 5, { align: 'center' });
-
-        doc.setFontSize(8).setTextColor(150).text('This is a computer-generated invoice.', 105, pageHeight - 10, { align: 'center' });
-
-        const pdfBlob = doc.output('blob');
-        const fileName = `Invoice-${invoice.invoice_number}.pdf`;
+        const pdfBlob = pdf.output('blob');
+        const fileName = `Invoice-${selectedInvoice.invoice_number}.pdf`;
         const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
         
         const shareData = {
             files: [pdfFile],
-            title: `Invoice ${invoice.invoice_number}`,
-            text: `Here is invoice ${invoice.invoice_number} from ${company.name || 'our company'}.`,
+            title: `Invoice ${selectedInvoice.invoice_number}`,
+            text: `Here is invoice ${selectedInvoice.invoice_number} from ${companyDetails.name || 'our company'}.`,
         };
 
         if (navigator.canShare && navigator.canShare(shareData)) {
@@ -553,7 +385,7 @@ const InvoicesPage: React.FC = () => {
                 </Button>
                )}
             </div>
-            <div>
+            <div ref={invoicePreviewRef}>
                <InvoiceTemplate invoice={selectedInvoice} companyDetails={companyDetails || null} />
             </div>
           </div>
