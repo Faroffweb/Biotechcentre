@@ -169,8 +169,9 @@ const InvoicesPage: React.FC = () => {
 
     toast('Generating PDF...');
     try {
-      const canvas = await html2canvas(input, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
+      // Use JPEG format and a slightly lower scale to reduce file size and prevent corruption.
+      const canvas = await html2canvas(input, { scale: 1.5 });
+      const imgData = canvas.toDataURL('image/jpeg', 0.95); // 95% quality JPEG
 
       const pdf = new jsPDF({
         orientation: 'portrait',
@@ -189,7 +190,8 @@ const InvoicesPage: React.FC = () => {
       
       const x = (pdfWidth - finalWidth) / 2;
 
-      pdf.addImage(imgData, 'PNG', x, 0, finalWidth, finalHeight);
+      // Add the image as a JPEG with medium compression for further size optimization.
+      pdf.addImage(imgData, 'JPEG', x, 0, finalWidth, finalHeight, undefined, 'MEDIUM');
       pdf.save(`Invoice-${selectedInvoice.invoice_number}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -207,8 +209,9 @@ const InvoicesPage: React.FC = () => {
     toast('Preparing to share...');
 
     try {
-        const canvas = await html2canvas(input, { scale: 2 });
-        const imgData = canvas.toDataURL('image/png');
+        // Use JPEG format and a slightly lower scale to reduce file size.
+        const canvas = await html2canvas(input, { scale: 1.5 });
+        const imgData = canvas.toDataURL('image/jpeg', 0.95); // 95% quality JPEG
 
         const pdf = new jsPDF({
             orientation: 'portrait',
@@ -227,7 +230,8 @@ const InvoicesPage: React.FC = () => {
 
         const x = (pdfWidth - finalWidth) / 2;
         
-        pdf.addImage(imgData, 'PNG', x, 0, finalWidth, finalHeight);
+        // Add the image as a JPEG with medium compression.
+        pdf.addImage(imgData, 'JPEG', x, 0, finalWidth, finalHeight, undefined, 'MEDIUM');
 
         const pdfBlob = pdf.output('blob');
         const fileName = `Invoice-${selectedInvoice.invoice_number}.pdf`;
